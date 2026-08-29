@@ -239,7 +239,7 @@ static bool parseWebhook(const Settings& s, StockData& d, Stream& stream) {
 }
 
 // ---- parse: Yahoo Finance chart payload -----------------------------------
-static bool parseYahoo(const Settings& s, StockData& d, Stream& stream) {
+static bool parseYahoo(const Settings& s, StockData& d, const String& body) {
   // Keep only the handful of fields we need; the full payload is large and the
   // `meta` object alone has many nested members we don't care about.
   JsonDocument filter;
@@ -254,17 +254,29 @@ static bool parseYahoo(const Settings& s, StockData& d, Stream& stream) {
 
   JsonDocument doc;
   DeserializationError err = deserializeJson(
-      doc, stream, DeserializationOption::Filter(filter));
-  if (err) return false;
+      doc, body, DeserializationOption::Filter(filter));
+  if (err) {
+    strlcpy(d.fetchStage, err.c_str(), sizeof(d.fetchStage));
+    return false;
+  }
 
   JsonObjectConst res  = doc["chart"]["result"][0];
   JsonObjectConst meta = res["meta"];
-  if (meta.isNull()) return false;                 // bad symbol => result null
+  if (meta.isNull()) {
+    strlcpy(d.fetchStage, "no-meta", sizeof(d.fetchStage));
+    return false;                                  // bad symbol => result null
+  }
   if (!meta["regularMarketPrice"].is<float>() &&
-      !meta["regularMarketPrice"].is<int>()) return false;
+      !meta["regularMarketPrice"].is<int>()) {
+    strlcpy(d.fetchStage, "no-price", sizeof(d.fetchStage));
+    return false;
+  }
 
   float price = meta["regularMarketPrice"].as<float>();
-  if (isnan(price)) return false;
+  if (isnan(price)) {
+    strlcpy(d.fetchStage, "nan-price", sizeof(d.fetchStage));
+    return false;
+  }
   d.price = price;
 
   yahooCurrency(meta["currency"] | "", d.currency, sizeof(d.currency));
@@ -458,13 +470,19 @@ static bool fetchUrl(const Settings& s, const String& url, ParseKind kind, Stock
     //  - Yahoo / GitHub / webhook: forced to the cheap static-RSA suites, so
     //    those handshakes stay as light as the old BASIC build.
     if (cash) {
-      if (platformMaxFreeBlock() < 16000) return false;   // largest contiguous block, not total
+      if (platformMaxFreeBlock() < 16000) {
+        strlcpy(d.fetchStage, "low-memory", sizeof(d.fetchStage));
+        return false;
+      }
       client.reset(platformMakeSecureClient(512, &g_cashSession, 512, /*cheapCiphers=*/false));
     } else {
       // raw.githubusercontent.com sends a ~4 KB cert record and won't negotiate
       // MFLN, so it needs a bigger receive buffer than Yahoo's small records.
       uint16_t rx = (kind == PARSE_GITHUB) ? GH_QUOTES_RXBUF : 2048;
-      if (ESP.getFreeHeap() < (uint32_t)rx + 12000) return false;
+      if (ESP.getFreeHeap() < (uint32_t)rx + 12000) {
+        strlcpy(d.fetchStage, "low-memory", sizeof(d.fetchStage));
+        return false;
+      }
       client.reset(platformMakeSecureClient(rx, nullptr, 512, /*cheapCiphers=*/true));
     }
   } else {
@@ -472,13 +490,20 @@ static bool fetchUrl(const Settings& s, const String& url, ParseKind kind, Stock
   }
 
   HTTPClient http;
-  http.setTimeout(s.httpTimeout);
+  uint16_t timeout = s.httpTimeout;
+  if (kind == PARSE_YAHOO && timeout < YAHOO_HTTP_TIMEOUT) timeout = YAHOO_HTTP_TIMEOUT;
+  http.setTimeout(timeout);
   http.setReuse(false);
   // HTTP/1.0 so the server can't reply with chunked framing: the parsers read
   // the raw stream via getStream(), which neither core de-chunks. Yahoo chunks
   // its HTTP/1.1 responses, which broke Yahoo tickers on the ESP32 targets.
   http.useHTTP10(true);
-  if (!http.begin(*client, url)) return false;
+  d.lastHttp = 0;
+  strlcpy(d.fetchStage, "request", sizeof(d.fetchStage));
+  if (!http.begin(*client, url)) {
+    strlcpy(d.fetchStage, "begin", sizeof(d.fetchStage));
+    return false;
+  }
   http.addHeader("Accept", "application/json");
   if (kind == PARSE_YAHOO) {
     http.setUserAgent(F(YAHOO_USER_AGENT));   // empty UA => HTTP 429 from Yahoo
@@ -490,18 +515,39 @@ static bool fetchUrl(const Settings& s, const String& url, ParseKind kind, Stock
   }
 
   int code = http.GET();
+  d.lastHttp = (int16_t)code;
   if (code != HTTP_CODE_OK) {
+    strlcpy(d.fetchStage, code < 0 ? "network" : "http", sizeof(d.fetchStage));
     http.end();
     return false;
   }
 
   bool ok;
   switch (kind) {
-    case PARSE_YAHOO:      ok = parseYahoo(s, d, http.getStream());     break;
+    case PARSE_YAHOO: {
+      // Buffer Yahoo's compact chart response before decoding it. On the Pro,
+      // decoding the filtered document directly from the live TLS stream could
+      // fail even after Yahoo returned HTTP 200. The selected ranges/intervals
+      // keep this payload small, and buffering makes a short body detectable
+      // instead of reporting a vague parse error.
+      int expected = http.getSize();
+      String body = http.getString();
+      if (expected > 0 && body.length() != (size_t)expected) {
+        strlcpy(d.fetchStage, "short-body", sizeof(d.fetchStage));
+        ok = false;
+      } else {
+        strlcpy(d.fetchStage, "parsing", sizeof(d.fetchStage));
+        ok = parseYahoo(s, d, body);
+      }
+      break;
+    }
     case PARSE_CASH_QUOTE: ok = parseCashQuote(s, d, http.getStream()); break;
     case PARSE_CASH_CHART: ok = parseCashChart(s, d, http.getStream()); break;
     default:               ok = parseWebhook(s, d, http.getStream());   break;  // webhook + github: same JSON
   }
+  if (ok) strlcpy(d.fetchStage, "ok", sizeof(d.fetchStage));
+  else if (!strcmp(d.fetchStage, "request") || !strcmp(d.fetchStage, "parsing"))
+    strlcpy(d.fetchStage, "parse", sizeof(d.fetchStage));
   http.end();
   return ok;
 }

@@ -72,6 +72,18 @@ struct UsageSettings {
   void fromJson(JsonObjectConst o);
 };
 
+// ---- Weather feature slice ------------------------------------------------
+struct WeatherSettings {
+  String   city;           // Open-Meteo geocoding query, e.g. "Seoul" or "Paris, FR"
+  String   label;          // short title shown on the 240x240 screen
+  uint16_t pollMin;        // forecast refresh period in minutes
+  bool     fahrenheit;     // false = Celsius / km/h, true = Fahrenheit / mph
+
+  void setDefaults();
+  void toJson(JsonObject o) const;
+  void fromJson(JsonObjectConst o);
+};
+
 // ---- Clock / night mode slice (device-wide) --------------------------------
 struct ClockSettings {
   String   tz;            // IANA display name, e.g. "Europe/Rome" (UI round-trip)
@@ -189,11 +201,11 @@ struct Settings {
   String hostname;      // mDNS name => http://<hostname>.local
 
   // --- Active feature ---
-  uint8_t mode;         // MODE_STOCKS / MODE_USAGE / MODE_RADAR / MODE_CAROUSEL / MODE_HA / MODE_AGENTS
+  uint8_t mode;         // MODE_STOCKS / MODE_USAGE / MODE_RADAR / MODE_WEATHER / MODE_CAROUSEL / MODE_HA / MODE_AGENTS
 
   // --- Carousel (mode == MODE_CAROUSEL): dwell + which features rotate ---
   uint16_t carouselSec;
-  bool carouselTicker, carouselUsage, carouselRadar, carouselHa, carouselAgents;
+  bool carouselTicker, carouselUsage, carouselRadar, carouselWeather, carouselHa, carouselAgents;
 
   // --- Shared HTTP / display ---
   uint16_t httpTimeout; // ms
@@ -205,6 +217,7 @@ struct Settings {
   // --- Feature slices ---
   TickerSettings  ticker;
   UsageSettings   usage;
+  WeatherSettings weather;
   RadarSettings   radar;
   HaSettings      ha;        // MQTT broker for HA screens
   ClockSettings   clock;

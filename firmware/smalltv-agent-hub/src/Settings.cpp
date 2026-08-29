@@ -139,6 +139,34 @@ void UsageSettings::fromJson(JsonObjectConst o) {
 }
 
 // ===========================================================================
+// Weather slice
+// ===========================================================================
+void WeatherSettings::setDefaults() {
+  city = DEFAULT_WEATHER_CITY;
+  label = DEFAULT_WEATHER_LABEL;
+  pollMin = DEFAULT_WEATHER_POLL_MIN;
+  fahrenheit = false;
+}
+
+void WeatherSettings::toJson(JsonObject o) const {
+  o["city"] = city;
+  o["label"] = label;
+  o["pollMin"] = pollMin;
+  o["fahrenheit"] = fahrenheit;
+}
+
+void WeatherSettings::fromJson(JsonObjectConst o) {
+  if (o["city"].is<const char*>()) city = o["city"].as<String>();
+  if (o["label"].is<const char*>()) label = o["label"].as<String>();
+  if (o["pollMin"].is<int>()) pollMin = constrain((int)o["pollMin"], 5, 360);
+  if (o["fahrenheit"].is<bool>()) fahrenheit = o["fahrenheit"];
+  city.trim();
+  label.trim();
+  if (city.length() >= WEATHER_CITY_LEN) city.remove(WEATHER_CITY_LEN - 1);
+  if (label.length() >= WEATHER_LABEL_LEN) label.remove(WEATHER_LABEL_LEN - 1);
+}
+
+// ===========================================================================
 // Clock / night mode slice
 // ===========================================================================
 static uint16_t hhmmToMin(const char* s, uint16_t fallback) {
@@ -432,7 +460,7 @@ void Settings::setDefaults() {
 
   mode = DEFAULT_MODE;
   carouselSec = DEFAULT_CAROUSEL_SEC;
-  carouselTicker = carouselUsage = carouselRadar = carouselHa = carouselAgents = true;
+  carouselTicker = carouselUsage = carouselRadar = carouselWeather = carouselHa = carouselAgents = true;
   httpTimeout = DEFAULT_HTTP_TIMEOUT;
 
   brightness = DEFAULT_BRIGHTNESS;
@@ -442,6 +470,7 @@ void Settings::setDefaults() {
 
   ticker.setDefaults();
   usage.setDefaults();
+  weather.setDefaults();
   radar.setDefaults();
   ha.setDefaults();
   clock.setDefaults();
@@ -531,6 +560,7 @@ void settingsToJson(const Settings& s, JsonObject root, bool includeSecrets) {
 
   // Mode + shared HTTP/display
   root["mode"]              = (s.mode == MODE_AGENTS)   ? "agents"
+                            : (s.mode == MODE_WEATHER)  ? "weather"
                             : (s.mode == MODE_RADAR)    ? "radar"
                             : (s.mode == MODE_USAGE)    ? "usage"
                             : (s.mode == MODE_HA)       ? "ha"
@@ -539,6 +569,7 @@ void settingsToJson(const Settings& s, JsonObject root, bool includeSecrets) {
   root["carouselTicker"]    = s.carouselTicker;
   root["carouselUsage"]     = s.carouselUsage;
   root["carouselRadar"]     = s.carouselRadar;
+  root["carouselWeather"]   = s.carouselWeather;
   root["carouselHa"]        = s.carouselHa;
   root["carouselAgents"]    = s.carouselAgents;
   root["httpTimeout"]       = s.httpTimeout;
@@ -550,6 +581,7 @@ void settingsToJson(const Settings& s, JsonObject root, bool includeSecrets) {
   // Feature slices
   s.ticker.toJson(root["ticker"].to<JsonObject>());
   s.usage.toJson(root["usage"].to<JsonObject>());
+  s.weather.toJson(root["weather"].to<JsonObject>());
   s.radar.toJson(root["radar"].to<JsonObject>());
   s.ha.toJson(root["ha"].to<JsonObject>(), includeSecrets);
   s.clock.toJson(root["clock"].to<JsonObject>());
@@ -605,6 +637,7 @@ void settingsApplyJson(Settings& s, JsonObjectConst root) {
   if (root["mode"].is<const char*>()) {
     String m = root["mode"].as<String>();
     s.mode = m.equalsIgnoreCase("agents")   ? MODE_AGENTS
+           : m.equalsIgnoreCase("weather") ? MODE_WEATHER
            : m.equalsIgnoreCase("radar")    ? MODE_RADAR
            : m.equalsIgnoreCase("usage")    ? MODE_USAGE
            : m.equalsIgnoreCase("ha")       ? MODE_HA
@@ -614,6 +647,7 @@ void settingsApplyJson(Settings& s, JsonObjectConst root) {
   if (root["carouselTicker"].is<bool>())  s.carouselTicker = root["carouselTicker"];
   if (root["carouselUsage"].is<bool>())   s.carouselUsage = root["carouselUsage"];
   if (root["carouselRadar"].is<bool>())   s.carouselRadar = root["carouselRadar"];
+  if (root["carouselWeather"].is<bool>()) s.carouselWeather = root["carouselWeather"];
   if (root["carouselHa"].is<bool>())      s.carouselHa = root["carouselHa"];
   if (root["carouselAgents"].is<bool>())  s.carouselAgents = root["carouselAgents"];
 
@@ -630,6 +664,7 @@ void settingsApplyJson(Settings& s, JsonObjectConst root) {
   s.ticker.fromJson(t);
   JsonObjectConst u = root["usage"].is<JsonObjectConst>() ? root["usage"].as<JsonObjectConst>() : root;
   s.usage.fromJson(u);
+  if (root["weather"].is<JsonObjectConst>()) s.weather.fromJson(root["weather"].as<JsonObjectConst>());
   // Radar has no legacy flat layout; only apply when its nested object is present.
   if (root["radar"].is<JsonObjectConst>()) s.radar.fromJson(root["radar"].as<JsonObjectConst>());
   // HA has no legacy flat layout either; only apply when its object is present.

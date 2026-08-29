@@ -8,6 +8,9 @@
 #include "OtaUpdate.h"
 #include "StockClient.h"
 #include "UsageClient.h"
+#if WITH_WEATHER
+#include "features/weather/WeatherClient.h"
+#endif
 #if WITH_RADAR
 #include "RadarClient.h"
 #endif
@@ -72,6 +75,7 @@ static const char* appModeName(uint8_t mode) {
     case MODE_AGENTS:   return "agents";
     case MODE_STOCKS:   return "stocks";
     case MODE_USAGE:    return "usage";
+    case MODE_WEATHER:  return "weather";
     case MODE_RADAR:    return "radar";
     case MODE_HA:       return "ha";
     case MODE_CAROUSEL: return "carousel";
@@ -88,6 +92,9 @@ static bool appModeFromName(const char* name, uint8_t& mode) {
 #endif
 #if WITH_USAGE
   if (!strcmp(name, "usage")) { mode = MODE_USAGE; return true; }
+#endif
+#if WITH_WEATHER
+  if (!strcmp(name, "weather")) { mode = MODE_WEATHER; return true; }
 #endif
 #if WITH_RADAR
   if (!strcmp(name, "radar")) { mode = MODE_RADAR; return true; }
@@ -115,6 +122,7 @@ static void handleGetConfig() {
   JsonObject feat = root["features"].to<JsonObject>();
   feat["ticker"] = (bool)WITH_TICKER;
   feat["usage"]  = (bool)WITH_USAGE;
+  feat["weather"] = (bool)WITH_WEATHER;
   feat["radar"]  = (bool)WITH_RADAR;
   feat["ha"]     = (bool)WITH_HA;
   feat["agents"] = (bool)WITH_AGENTS;
@@ -126,6 +134,7 @@ static void handleGetConfig() {
 #else
   feat["wireguard"] = false;
 #endif
+
   // Which chip this build runs on (the UI warns about per-chip limitations).
 #if defined(SMALLTV_ESP32C2)
   root["chip"] = "esp32c2";
@@ -176,6 +185,24 @@ static void handleStatus() {
     t["lastEvent"] = touchButtonLastEvent();
   }
 
+#if WITH_WEATHER
+  {
+    const WeatherData& d = weatherData();
+    JsonObject w = o["weather"].to<JsonObject>();
+    w["city"] = d.city;
+    w["valid"] = d.valid;
+    w["error"] = d.error;
+    w["stage"] = weatherStage();
+    w["http"] = weatherLastHttp();
+    if (d.valid) {
+      w["temperature"] = d.temperature;
+      w["condition"] = d.code;
+      w["updatedAgo"] = (millis() - d.lastOkMs) / 1000UL;
+    }
+    if (d.error) w["retryIn"] = weatherRetryInSec();
+  }
+#endif
+
 #if WITH_TICKER
   JsonArray arr = o["tickers"].to<JsonArray>();
   for (uint8_t i = 0; i < stocksCount(); i++) {
@@ -184,7 +211,11 @@ static void handleStatus() {
     t["symbol"] = d.symbol;
     t["valid"] = d.valid;
     t["error"] = d.error;
-    if (d.error) t["retryIn"] = stockRetryInSec(i);   // seconds to the next attempt
+    if (d.error) {
+      t["retryIn"] = stockRetryInSec(i);   // seconds to the next attempt
+      t["stage"] = d.fetchStage;
+      t["http"] = d.lastHttp;
+    }
     if (d.valid) {
       t["price"] = d.price;
       float chg, pct;
@@ -382,6 +413,9 @@ static void handleRefresh() {
   if (!requireAuth()) return;
 #if WITH_TICKER
   stocksForceRefresh();
+#endif
+#if WITH_WEATHER
+  weatherForceRefresh();
 #endif
   server.send(200, "application/json", "{\"ok\":true}");
 }

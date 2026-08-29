@@ -46,6 +46,21 @@ The web dashboard's **Status** tab provides the same app choices as direct
 buttons. Selecting one calls `POST /api/mode`, closes any notification or touch
 menu, displays that app immediately, and saves it as the reboot default.
 
+## SmallTV Pro apps
+
+The `smalltv_esp32_8mb` build contains Agent Hub, Ticker, Clawdmeter, Weather,
+Home Assistant, and Carousel. Radar is disabled in this target. Weather resolves
+the configured city with Open-Meteo geocoding and fetches current conditions plus
+a compact four-day forecast without an API key.
+
+Yahoo tickers accept exchange-qualified symbols such as `000660.KS`. The Pro
+buffers Yahoo's chart response before parsing it, because direct decoding from
+the live TLS stream could fail despite an HTTP 200 response. The Ticker tab
+exposes the last fetch stage and HTTP code when a symbol fails.
+
+Saving the web form shows a short success or failure toast, and temporarily
+disables the save button to prevent duplicate submissions.
+
 ## Build and install
 
 ```bash

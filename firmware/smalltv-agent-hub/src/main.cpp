@@ -34,6 +34,9 @@
 #if WITH_USAGE
 #include "UsageMode.h"
 #endif
+#if WITH_WEATHER
+#include "features/weather/WeatherMode.h"
+#endif
 #if WITH_RADAR
 #include "RadarMode.h"
 #endif
@@ -55,6 +58,9 @@ static DisplayMode* kModes[] = {
 #if WITH_USAGE
   &g_usageMode,
 #endif
+#if WITH_WEATHER
+  &g_weatherMode,
+#endif
 #if WITH_RADAR
   &g_radarMode,
 #endif
@@ -75,6 +81,7 @@ static bool carouselHas(const Settings& s, const DisplayMode* m) {
     case MODE_AGENTS: return s.carouselAgents;
     case MODE_STOCKS: return s.carouselTicker;
     case MODE_USAGE:  return s.carouselUsage;
+    case MODE_WEATHER:return s.carouselWeather;
     case MODE_RADAR:  return s.carouselRadar;
 #if WITH_HA
     case MODE_HA:     return s.carouselHa;
@@ -126,6 +133,7 @@ static const char* touchModeLabel(uint8_t mode) {
     case MODE_AGENTS:   return "Agent Hub";
     case MODE_STOCKS:   return "Ticker";
     case MODE_USAGE:    return "Clawdmeter";
+    case MODE_WEATHER:  return "Weather";
     case MODE_RADAR:    return "Radar";
     case MODE_HA:       return "Home Assistant";
     case MODE_CAROUSEL: return "Carousel";

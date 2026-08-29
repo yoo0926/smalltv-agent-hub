@@ -12,7 +12,7 @@
 // Firmware identity
 // ---------------------------------------------------------------------------
 #define FW_NAME     "smalltv-agent-hub"
-#define FW_VERSION  "0.1.2"
+#define FW_VERSION  "0.2.0"
 #define SELF_UPDATE_ENABLED 0   // custom builds update only via an explicitly uploaded .bin
 
 // Project / update references (shown in the web UI; used by the GitHub self-update)
@@ -138,6 +138,7 @@
 #define MODE_NOTIFY    4             // transient overlay: armed over HTTP, never persisted
 #define MODE_HA        5             // Home Assistant screens pushed over MQTT
 #define MODE_AGENTS    6             // local Conductor / Claude / Codex task dashboard
+#define MODE_WEATHER   7             // current conditions + compact forecast
 #define DEFAULT_MODE MODE_AGENTS
 #define DEFAULT_CAROUSEL_SEC 30      // per-mode dwell in carousel
 
@@ -212,6 +213,21 @@
 #ifndef WITH_AGENTS
 #define WITH_AGENTS 1
 #endif
+#ifndef WITH_WEATHER
+#define WITH_WEATHER 0
+#endif
+
+// Weather mode (Open-Meteo geocoding + forecast; no API key).
+#define WEATHER_CITY_LEN          48
+#define WEATHER_LABEL_LEN         20
+#define WEATHER_FORECAST_DAYS      4
+#define DEFAULT_WEATHER_CITY      "Seoul"
+#define DEFAULT_WEATHER_LABEL     "Seoul"
+#define DEFAULT_WEATHER_POLL_MIN  20
+#define WEATHER_RETRY_SEC          60
+#define WEATHER_HTTP_TIMEOUT_MS 15000
+#define OPEN_METEO_GEO_URL  "https://geocoding-api.open-meteo.com/v1/search"
+#define OPEN_METEO_URL      "https://api.open-meteo.com/v1/forecast"
 
 // Claude usage mode: once data stops arriving for this long (PC asleep, daemon
 // stopped, network down) the screen switches from the stats to the idle mascot
@@ -333,6 +349,7 @@
 #define DEFAULT_POINTS        48             // sparkline points requested
 #define DEFAULT_BRIGHTNESS    90             // 0..100 %
 #define DEFAULT_HTTP_TIMEOUT  8000           // ms per request
+#define YAHOO_HTTP_TIMEOUT   15000           // TLS/API can be slower from the ESP32 than a desktop
 
 // --- Panel colour correction (device-wide) ---
 // Panels differ between (and within) the SmallTV variants: white balance drifts

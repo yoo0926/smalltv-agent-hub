@@ -24,6 +24,8 @@ struct StockData {
   bool     error;     // most recent fetch failed
   bool     userNamed; // user supplied a custom name (don't override from source)
   uint32_t lastOkMs;  // millis() of last good update
+  int16_t  lastHttp;  // HTTP status, or negative HTTPClient transport error
+  char     fetchStage[20]; // ok / network / http / parse detail / low-memory
 
   // Per-symbol fetch schedule. Every ticker carries its own due time, so one
   // that fails (bad symbol, a provider hiccup, or an ESP8266 heap-guard skip)
@@ -44,6 +46,8 @@ struct StockData {
     error = false;
     userNamed = false;
     lastOkMs = 0;
+    lastHttp = 0;
+    strlcpy(fetchStage, "idle", sizeof(fetchStage));
     nextTryMs = 0;
     fails = 0;
   }

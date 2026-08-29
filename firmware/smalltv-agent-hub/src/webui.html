@@ -44,8 +44,9 @@ td{padding:6px 4px}
 .symrow input{margin:0}
 .kv{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bd)}
 .kv:last-child{border:0}.kv b{font-weight:600}
-.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#0b0e13;border:1px solid var(--bd);padding:10px 16px;border-radius:10px;opacity:0;transition:.3s;pointer-events:none}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#0b0e13;border:1px solid var(--bd);padding:12px 18px;border-radius:10px;opacity:0;transition:.3s;pointer-events:none;z-index:20;box-shadow:0 8px 30px #0008;white-space:nowrap}
 .toast.show{opacity:1}
+.toast.ok{border-color:var(--acc);color:#b8f5c5}.toast.err{border-color:var(--red);color:#ffb8b3}
 .net{padding:8px;border:1px solid var(--bd);border-radius:8px;margin:4px 0;cursor:pointer;display:flex;justify-content:space-between}
 .net:hover{border-color:var(--acc2)}
 .bar{height:8px;background:#0b0e13;border-radius:6px;overflow:hidden;margin-top:8px}
@@ -61,6 +62,7 @@ small.hint{display:block;color:var(--mut);margin-top:4px;font-size:12px}
  <button data-t="display">Display</button>
  <button data-t="ticker">Ticker</button>
  <button data-t="usage">Clawdmeter</button>
+ <button data-t="weather">Weather</button>
  <button data-t="radar">Radar</button>
  <button data-t="ha">Home Assistant</button>
  <button data-t="update">System</button>
@@ -73,6 +75,7 @@ small.hint{display:block;color:var(--mut);margin-top:4px;font-size:12px}
     <button class="btn" data-mode="agents" onclick="activateMode('agents')">Agent Hub</button>
     <button class="btn" data-mode="stocks" onclick="activateMode('stocks')">Ticker</button>
     <button class="btn" data-mode="usage" onclick="activateMode('usage')">Clawdmeter</button>
+    <button class="btn" data-mode="weather" onclick="activateMode('weather')">Weather</button>
     <button class="btn" data-mode="radar" onclick="activateMode('radar')">Radar</button>
     <button class="btn" data-mode="ha" onclick="activateMode('ha')">Home Assistant</button>
     <button class="btn" data-mode="carousel" onclick="activateMode('carousel')">Carousel</button>
@@ -132,6 +135,7 @@ small.hint{display:block;color:var(--mut);margin-top:4px;font-size:12px}
     <option value="agents">Agent Hub</option>
     <option value="stocks">Ticker</option>
     <option value="usage">Clawdmeter</option>
+    <option value="weather">Weather</option>
     <option value="radar">Radar</option>
     <option value="ha">Home Assistant</option>
     <option value="carousel">Carousel (rotate modes)</option>
@@ -141,6 +145,7 @@ small.hint{display:block;color:var(--mut);margin-top:4px;font-size:12px}
     <div class="chk"><input id="carouselAgents" type="checkbox"><label>Agent Hub</label></div>
     <div class="chk"><input id="carouselTicker" type="checkbox"><label>Ticker</label></div>
     <div class="chk"><input id="carouselUsage" type="checkbox"><label>Clawdmeter</label></div>
+    <div class="chk"><input id="carouselWeather" type="checkbox"><label>Weather</label></div>
     <div class="chk"><input id="carouselRadar" type="checkbox"><label>Radar</label></div>
     <div class="chk"><input id="carouselHa" type="checkbox"><label>Home Assistant</label></div>
    </div>
@@ -260,6 +265,22 @@ small.hint{display:block;color:var(--mut);margin-top:4px;font-size:12px}
   </div>
  </section>
 
+ <!-- WEATHER (feature) -->
+ <section id="weather" class="tab">
+  <div class="card"><h2>Live weather</h2><div id="weatherBox" class="muted">Waiting for data...</div>
+   <button class="btn sec" style="margin-top:10px" onclick="refreshNow()">Refresh weather now</button>
+  </div>
+  <div class="card"><h2>Location &amp; units</h2>
+   <label>City or postal code</label><input id="weatherCity" type="text" placeholder="Seoul or Paris, FR">
+   <label>Short screen label <span class="muted">(optional)</span></label><input id="weatherLabel" type="text" maxlength="19" placeholder="Seoul">
+   <div class="row">
+    <div><label>Refresh every (min)</label><input id="weatherPollMin" type="number" min="5" max="360"></div>
+    <div><label>Units</label><select id="weatherFahrenheit"><option value="false">Celsius / km/h</option><option value="true">Fahrenheit / mph</option></select></div>
+   </div>
+   <small class="hint">The device resolves the city name and downloads current conditions plus a four-day forecast from Open-Meteo. No API key is needed. Use a country or region after a comma if the city name is ambiguous.</small>
+  </div>
+ </section>
+
  <!-- RADAR (feature) -->
  <section id="radar" class="tab">
   <div class="card"><h2>Home location</h2>
@@ -356,7 +377,7 @@ small.hint{display:block;color:var(--mut);margin-top:4px;font-size:12px}
  </section>
 </main>
 
-<div style="text-align:center;padding:0 0 16px"><button class="btn" onclick="saveAll()">Save settings</button></div>
+<div style="text-align:center;padding:0 0 16px"><button class="btn" id="saveBtn" onclick="saveAll()">Save settings</button></div>
 <div style="text-align:center;padding:0 0 24px;font-size:12px">
  <a id="footRepo" href="https://github.com/giovi321/smalltv-mod" target="_blank" style="color:var(--acc2);text-decoration:none">Based on smalltv-mod</a>
  <span id="footVer" class="muted"></span>
@@ -371,7 +392,8 @@ function sv(id,v){var e=$(id);if(e)e.value=(v!=null?v:'')}
 function sc(id,v){var e=$(id);if(e)e.checked=!!v}
 function gv(id){var e=$(id);return e?e.value:''}
 function gc(id){var e=$(id);return e?e.checked:false}
-function toast(m){var t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2200)}
+var toastTimer=0;
+function toast(m,kind){var t=$('toast');clearTimeout(toastTimer);t.textContent=m;t.className='toast show'+(kind===1?' ok':kind===0?' err':'');toastTimer=setTimeout(function(){t.classList.remove('show')},3200)}
 function j(url,opt){return fetch(url,opt).then(function(r){return r.json()})}
 
 // tabs
@@ -417,9 +439,9 @@ var TZMAP={
 function fillTz(){var s=$('tz');if(!s)return;var keys=Object.keys(TZMAP).filter(function(k){return k!==''});
  keys.sort();s.innerHTML='<option value="">UTC</option>'+keys.map(function(k){return '<option value="'+k+'">'+k+'</option>'}).join('');}
 
-var MODEOPT={ticker:'stocks',usage:'usage',radar:'radar',ha:'ha',agents:'agents'};
-var MODELABEL={agents:'Agent Hub',stocks:'Ticker',usage:'Clawdmeter',radar:'Radar',ha:'Home Assistant',carousel:'Carousel'};
-var CAROPT={ticker:'carouselTicker',usage:'carouselUsage',radar:'carouselRadar',ha:'carouselHa',agents:'carouselAgents'};
+var MODEOPT={ticker:'stocks',usage:'usage',weather:'weather',radar:'radar',ha:'ha',agents:'agents'};
+var MODELABEL={agents:'Agent Hub',stocks:'Ticker',usage:'Clawdmeter',weather:'Weather',radar:'Radar',ha:'Home Assistant',carousel:'Carousel'};
+var CAROPT={ticker:'carouselTicker',usage:'carouselUsage',weather:'carouselWeather',radar:'carouselRadar',ha:'carouselHa',agents:'carouselAgents'};
 function hideFeat(name){
  var b=document.querySelector('nav button[data-t="'+name+'"]'); if(b)b.remove();
  var sec=$(name); if(sec)sec.remove();
@@ -443,7 +465,7 @@ function setGain(id,lab,v){var n=(v!=null?v:100);sv(id,n);var e=$(lab);if(e)e.te
 function resetColors(){setGain('rGain','rgVal',100);setGain('gGain','ggVal',100);setGain('bGain','bgVal',100);
  toast('Gains reset — press Save settings to apply')}
 function loadConfig(){return j('/api/config').then(function(c){C=c;
- var f=c.features||{}; ['ticker','usage','radar','ha','agents'].forEach(function(k){if(f[k]===false)hideFeat(k)});
+ var f=c.features||{}; ['ticker','usage','weather','radar','ha','agents'].forEach(function(k){if(f[k]===false)hideFeat(k)});
  // WireGuard is only built for the chips with room for it; drop the card otherwise
  if(f.wireguard===false){var wc=$('wgCard'); if(wc)wc.remove()}
  var w=c.wg||{};
@@ -476,6 +498,7 @@ function loadConfig(){return j('/api/config').then(function(c){C=c;
  $('mode').value=c.mode||'stocks'; modeChanged();
  sv('carouselSec',c.carouselSec||30);
  sc('carouselTicker',c.carouselTicker!==false); sc('carouselUsage',c.carouselUsage!==false); sc('carouselRadar',c.carouselRadar!==false);
+ sc('carouselWeather',c.carouselWeather!==false);
  sc('carouselHa',c.carouselHa!==false);
  sc('carouselAgents',c.carouselAgents!==false);
  // HA / MQTT slice
@@ -493,6 +516,10 @@ function loadConfig(){return j('/api/config').then(function(c){C=c;
  // usage slice
  sv('usageUrl',u.usageUrl);
  sv('usagePollSec',u.pollSec);
+ // weather slice
+ var wt=c.weather||{};
+ sv('weatherCity',wt.city||'Seoul');sv('weatherLabel',wt.label||'');sv('weatherPollMin',wt.pollMin||20);
+ sv('weatherFahrenheit',wt.fahrenheit?'true':'false');
  // radar slice
  var r=c.radar||{};
  sv('radarLat',r.lat); sv('radarLon',r.lon);
@@ -634,10 +661,15 @@ function collect(){
   });
   o.radar=r;
  }
+ if($('weather')) o.weather={city:gv('weatherCity'),label:gv('weatherLabel'),pollMin:parseInt(gv('weatherPollMin'))||20,fahrenheit:gv('weatherFahrenheit')==='true'};
  return o;
 }
-function saveAll(){j('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collect())})
- .then(function(r){toast(r.reboot?'Saved — rebooting...':'Saved');if(r.reboot)setTimeout(function(){location.reload()},6000);loadStatus()})}
+function saveAll(){var b=$('saveBtn');if(b){b.disabled=true;b.textContent='Saving...'}
+ j('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collect())})
+ .then(function(r){if(!r.ok)throw new Error('save failed');toast(r.reboot?'Settings saved — rebooting...':'Settings saved successfully.',1);
+  if(b)b.textContent='Saved';if(r.reboot)setTimeout(function(){location.reload()},6000);else loadStatus();})
+ .catch(function(){toast('Could not save settings.',0);if(b)b.textContent='Save settings'})
+ .then(function(){if(b)setTimeout(function(){b.disabled=false;b.textContent='Save settings'},1600)})}
 
 function saveWifi(){
  var o={wifi:collectWifi()};
@@ -730,11 +762,15 @@ function loadStatus(){j('/api/status').then(function(s){
   var c=t.error?'var(--red)':(t.valid?'var(--acc)':'var(--mut)');
   var pc=t.changePct!=null?(t.changePct>=0?'+':'')+t.changePct.toFixed(2)+'%':'';
   var st=t.valid?(t.price+'  '+pc):(t.error?'error':'...');
+  if(t.error&&t.stage)st+=' <span class="muted">('+t.stage+(t.http?', '+t.http:'')+')</span>';
   // A failed ticker keeps its last good price on screen, so say when the next
   // attempt is due rather than leaving the row looking simply broken.
   if(t.error&&t.retryIn!=null)st+=' <span class="muted">(retry '+t.retryIn+'s)</span>';
   h+='<div class="kv"><b style="color:'+c+'">'+t.symbol+'</b><span>'+st+'</span></div>';});
  tb.innerHTML=h||'<span class="muted">No tickers configured</span>';}
+ var wb=$('weatherBox');if(wb){var w=s.weather||{};
+  wb.innerHTML=w.valid?kv('City',w.city||'-')+kv('Temperature',w.temperature+(C.weather&&C.weather.fahrenheit?' F':' C'))+kv('Status',w.error?'stale — '+(w.stage||'error'):'updated '+(w.updatedAgo||0)+'s ago'):
+   '<span style="color:'+(w.error?'var(--red)':'var(--mut)')+'">'+esc(w.stage||'waiting')+(w.http?' (HTTP '+w.http+')':'')+(w.retryIn?' — retry '+w.retryIn+'s':'')+'</span>';}
 })}
 function kv(k,v){return '<div class="kv"><span class="muted">'+k+'</span><b>'+v+'</b></div>'}
 // WireGuard: one line that names the failure rather than just saying "down".

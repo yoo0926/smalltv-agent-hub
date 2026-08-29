@@ -14,6 +14,9 @@ Local-only status bridge for Conductor sessions running Claude Code and Codex. T
 - Asynchronous push to `POST /api/agents`, plus full-screen `done` / `needs_input` alerts through `POST /api/notify`
 - SmallTV Pro touch controls: tap to dismiss an alert; hold to open the app menu, tap to move, and hold to select
 - Web dashboard app shortcuts that switch the display immediately and persist the selection
+- SmallTV Pro weather screen for a configured city, powered by Open-Meteo current conditions and a four-day forecast
+- Yahoo Finance ticker support for exchange-qualified symbols such as `000660.KS`, with fetch diagnostics in the web dashboard
+- Visible success/error toast feedback after saving settings in the web dashboard
 
 `TaskCompleted` is treated as progress rather than ending the main Claude session, because it can refer to a subtask or teammate. The Claude `Stop` hook is the authoritative turn-complete event.
 
@@ -47,6 +50,10 @@ The SmallTV pulls no data from the Mac. The bridge pushes outward, so the HTTP s
 Only the agent type, short workspace label, and lifecycle state are sent to the display. Prompts, responses, file paths, branches, and service credentials stay on the Mac.
 
 The firmware's optional web password also protects `/api/agents` and `/api/notify`. Leave it disabled for this first local setup; digest-auth support can be added to the Mac push client before enabling it.
+
+The current SmallTV Pro build includes Agent Hub, Ticker, Clawdmeter, Weather,
+Home Assistant, and Carousel. The upstream plane-radar screen is intentionally
+excluded from this build to leave room for the desk-focused weather screen.
 
 ## Install local agent hooks
 
