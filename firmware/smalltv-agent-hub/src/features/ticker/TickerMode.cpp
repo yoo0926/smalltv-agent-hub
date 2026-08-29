@@ -53,6 +53,77 @@ static void fmtPrice(float v, char* out, size_t n) {
   else                snprintf(out, n, "%.6f", v);
 }
 
+static bool isWonCurrency(const char* currency) {
+  return currency && !strcmp(currency, "KRW ");
+}
+
+// Korean equities trade in whole won. Grouping the digits makes a seven-digit
+// price much easier to scan on the 240 px display than trailing .00 decimals.
+static void fmtWonPrice(float value, char* out, size_t n) {
+  long whole = lroundf(value);
+  if (whole >= 1000000L)
+    snprintf(out, n, "%ld,%03ld,%03ld", whole / 1000000L,
+             (whole / 1000L) % 1000L, whole % 1000L);
+  else if (whole >= 1000L)
+    snprintf(out, n, "%ld,%03ld", whole / 1000L, whole % 1000L);
+  else
+    snprintf(out, n, "%ld", whole);
+}
+
+// The built-in 6x8 bitmap font has no Unicode won glyph. Draw a W from that
+// font and add the two horizontal strokes so the screen gets a real-looking
+// won sign instead of the ASCII text "KRW".
+static void drawWonGlyph(Arduino_GFX* gfx, int x, int y, uint8_t size,
+                         uint16_t color) {
+  gfx->setTextSize(size);
+  gfx->setTextColor(color);
+  gfx->setCursor(x, y);
+  gfx->print("W");
+  const int w = GFX_FONT_W * size - 1;
+  const int y1 = y + 3 * size;
+  const int y2 = y + 5 * size;
+  gfx->drawFastHLine(x, y1, w, color);
+  gfx->drawFastHLine(x, y2, w, color);
+  if (size >= 3) {
+    gfx->drawFastHLine(x, y1 + 1, w, color);
+    gfx->drawFastHLine(x, y2 + 1, w, color);
+  }
+}
+
+static uint8_t drawWonAmountCentered(Arduino_GFX* gfx, const char* amount,
+                                      int y, uint8_t maxSize, uint16_t color) {
+  char probe[24];
+  snprintf(probe, sizeof(probe), "W%s", amount);
+  uint8_t size = gfxFitSize(probe, 236, maxSize);
+  int totalW = GFX_FONT_W * size + gfxTextW(amount, size);
+  int x = (TFT_WIDTH - totalW) / 2;
+  drawWonGlyph(gfx, x, y, size, color);
+  gfx->setTextSize(size);
+  gfx->setTextColor(color);
+  gfx->setCursor(x + GFX_FONT_W * size, y);
+  gfx->print(amount);
+  return size;
+}
+
+static void drawCurrencyAmountRight(Arduino_GFX* gfx, const char* currency,
+                                    const char* amount, int y, uint8_t size,
+                                    uint16_t color) {
+  gfx->setTextSize(size);
+  gfx->setTextColor(color);
+  if (isWonCurrency(currency)) {
+    int totalW = GFX_FONT_W * size + gfxTextW(amount, size);
+    int x = TFT_WIDTH - totalW - 4;
+    drawWonGlyph(gfx, x, y, size, color);
+    gfx->setCursor(x + GFX_FONT_W * size, y);
+    gfx->print(amount);
+    return;
+  }
+  char line[20];
+  snprintf(line, sizeof(line), "%s%s", currency, amount);
+  gfx->setCursor(TFT_WIDTH - gfxTextW(line, size) - 4, y);
+  gfx->print(line);
+}
+
 // ---- one ticker page ------------------------------------------------------
 static void drawStock(const StockData& d, uint8_t pageIndex, uint8_t pageCount,
                       const Settings& s) {
@@ -103,13 +174,19 @@ static void drawStock(const StockData& d, uint8_t pageIndex, uint8_t pageCount,
   // Price (big, auto-fit)
   if (s.ticker.showPrice) {
     char num[20];
-    fmtPrice(d.price, num, sizeof(num));
-    char line[28];
-    snprintf(line, sizeof(line), "%s%s", d.currency, num);
-    uint8_t sz = gfxFitSize(line, 236, 6);
+    uint8_t sz;
+    if (isWonCurrency(d.currency)) {
+      fmtWonPrice(d.price, num, sizeof(num));
+      sz = drawWonAmountCentered(gfx, num, s.ticker.showName ? 74 : 64, 6, C_WHITE);
+    } else {
+      fmtPrice(d.price, num, sizeof(num));
+      char line[28];
+      snprintf(line, sizeof(line), "%s%s", d.currency, num);
+      sz = gfxFitSize(line, 236, 6);
+      gfxDrawCentered(line, s.ticker.showName ? 74 : 64, sz, C_WHITE);
+    }
     int ph = 8 * sz;
     int py = s.ticker.showName ? 74 : 64;
-    gfxDrawCentered(line, py, sz, C_WHITE);   // price stays neutral (not trend-colored)
     y = py + ph + 8;
   }
 
@@ -282,14 +359,11 @@ static void drawPortfolio(uint8_t pageIndex, uint8_t pageCount, const Settings& 
   for (uint8_t k = 0; k < curN && y <= 214; k++) {
     char vbuf[12];
     fmtVal(totV[k], vbuf, sizeof(vbuf));
-    char line[20];
-    snprintf(line, sizeof(line), "%s%s", totCur[k], vbuf);
     gfx->setTextSize(2);
     gfx->setTextColor(C_WHITE);
     gfx->setCursor(4, y);
     gfx->print("Total");
-    gfx->setCursor(TFT_WIDTH - gfxTextW(line, 2) - 4, y);
-    gfx->print(line);
+    drawCurrencyAmountRight(gfx, totCur[k], vbuf, y, 2, C_WHITE);
     if (totC[k] > 0) {
       float plPct = (totV[k] / totC[k] - 1.0f) * 100.0f;
       char pbuf[10];

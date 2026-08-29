@@ -16,6 +16,8 @@ Local-only status bridge for Conductor sessions running Claude Code and Codex. T
 - Web dashboard app shortcuts that switch the display immediately and persist the selection
 - SmallTV Pro weather screen for a configured city, powered by Open-Meteo current conditions and a four-day forecast
 - Yahoo Finance ticker support for exchange-qualified symbols such as `000660.KS`, with fetch diagnostics in the web dashboard
+- Native-looking won-sign and grouped whole-won prices for Korean tickers
+- Adaptive Agent Hub layout: a large hero view for one task, two large cards, or readable compact rows for three to four tasks
 - Visible success/error toast feedback after saving settings in the web dashboard
 
 `TaskCompleted` is treated as progress rather than ending the main Claude session, because it can refer to a subtask or teammate. The Claude `Stop` hook is the authoritative turn-complete event.

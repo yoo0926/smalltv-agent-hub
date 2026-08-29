@@ -12,7 +12,7 @@
 // Firmware identity
 // ---------------------------------------------------------------------------
 #define FW_NAME     "smalltv-agent-hub"
-#define FW_VERSION  "0.2.0"
+#define FW_VERSION  "0.2.1"
 #define SELF_UPDATE_ENABLED 0   // custom builds update only via an explicitly uploaded .bin
 
 // Project / update references (shown in the web UI; used by the GitHub self-update)

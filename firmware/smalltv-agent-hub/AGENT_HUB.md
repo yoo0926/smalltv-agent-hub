@@ -18,6 +18,12 @@ Supported states are `working`, `needs_input`, `done`, `failed`, and `idle`.
 Only printable short labels are retained; prompts and responses are not part of
 the protocol.
 
+The dashboard adapts to the number of visible sessions. One session gets a
+full-screen hero layout with a large project name and state, two sessions use
+two large cards, and three or four sessions use compact rows while keeping the
+project and state at text size 2. Long labels are shortened instead of being
+shrunk to the least-readable font size.
+
 Use the transient full-screen overlay for attention events:
 
 ```http
@@ -57,6 +63,9 @@ Yahoo tickers accept exchange-qualified symbols such as `000660.KS`. The Pro
 buffers Yahoo's chart response before parsing it, because direct decoding from
 the live TLS stream could fail despite an HTTP 200 response. The Ticker tab
 exposes the last fetch stage and HTTP code when a symbol fails.
+Korean won quotes use a drawn won glyph and grouped whole-won values (for
+example, `₩1,653,000`) because the device's built-in bitmap font has no Unicode
+won character.
 
 Saving the web form shows a short success or failure toast, and temporarily
 disables the save button to prevent duplicate submissions.
