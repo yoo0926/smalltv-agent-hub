@@ -1,0 +1,12 @@
+#!/bin/sh
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+HOOK="$SCRIPT_DIR/desk-hub-event"
+CWD=$(pwd)
+export CONDUCTOR_IS_LOCAL=1
+export CONDUCTOR_WORKSPACE_NAME=demo-workspace
+export CONDUCTOR_WORKSPACE_PATH="$CWD"
+export CONDUCTOR_ROOT_PATH="$CWD"
+
+printf '%s' "{\"session_id\":\"demo-claude\",\"cwd\":\"$CWD\",\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"Conductor demo task\"}" | "$HOOK" claude
+printf '%s' "{\"session_id\":\"demo-claude\",\"cwd\":\"$CWD\",\"hook_event_name\":\"Notification\",\"notification_type\":\"permission_prompt\",\"message\":\"Permission required\"}" | "$HOOK" claude
+"$HOOK" codex "{\"type\":\"agent-turn-complete\",\"thread-id\":\"demo-codex\",\"turn-id\":\"turn-1\",\"cwd\":\"$CWD\",\"last-assistant-message\":\"Codex task complete\"}"

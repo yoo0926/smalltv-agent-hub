@@ -1,0 +1,8 @@
+[project]
+name = "geekmagic-desk-hub"
+version = "0.1.0"
+description = "Local Conductor agent status bridge for GeekMagic SmallTV Pro"
+requires-python = ">=3.9"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

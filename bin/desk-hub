@@ -1,0 +1,9 @@
+#!/bin/sh
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PROJECT_DIR=$(dirname -- "$SCRIPT_DIR")
+if [ -x /opt/homebrew/bin/python3 ]; then
+  DESK_HUB_PYTHON=/opt/homebrew/bin/python3
+else
+  DESK_HUB_PYTHON=python3
+fi
+PYTHONPATH="$PROJECT_DIR/src${PYTHONPATH:+:$PYTHONPATH}" exec "$DESK_HUB_PYTHON" -m geekmagic_hub.server "$@"

@@ -1,0 +1,19 @@
+.runtime/
+__pycache__/
+*.pyc
+
+# Local research copies and downloaded reference material
+/references/
+/tmp/
+
+# Python tooling
+/.venv/
+/.pytest_cache/
+/.coverage
+htmlcov/
+
+# macOS / editors
+.DS_Store
+.vscode/
+*.swp
+*~
