@@ -12,7 +12,7 @@
 // Firmware identity
 // ---------------------------------------------------------------------------
 #define FW_NAME     "smalltv-agent-hub"
-#define FW_VERSION  "0.1.0"
+#define FW_VERSION  "0.1.1"
 #define SELF_UPDATE_ENABLED 0   // custom builds update only via an explicitly uploaded .bin
 
 // Project / update references (shown in the web UI; used by the GitHub self-update)
@@ -56,6 +56,17 @@
 #else
   #include "board_esp8266.h"
 #endif
+
+// Only the SmallTV Pro exposes the ESP32 capacitive touch button. Defaults keep
+// every other target on the same code path with a zero-cost stub.
+#ifndef HAS_TOUCH_BUTTON
+#define HAS_TOUCH_BUTTON 0
+#endif
+#ifndef TOUCH_BUTTON_PIN
+#define TOUCH_BUTTON_PIN -1
+#endif
+#define TOUCH_LONG_PRESS_MS    900UL
+#define TOUCH_MENU_TIMEOUT_MS 15000UL
 
 #define TFT_WIDTH  240
 #define TFT_HEIGHT 240

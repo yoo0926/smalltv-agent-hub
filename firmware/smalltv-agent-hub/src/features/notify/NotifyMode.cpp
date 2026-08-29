@@ -87,6 +87,12 @@ bool NotifyMode::active() const {
   return armed_ && (int32_t)(millis() - untilMs_) < 0;
 }
 
+void NotifyMode::dismiss() {
+  armed_ = false;
+  primed_ = false;
+  untilMs_ = millis();
+}
+
 void NotifyMode::service(const Settings& s) {
   const NotifyAnim& a = notify_anims[anim_];
   if (!primed_) {

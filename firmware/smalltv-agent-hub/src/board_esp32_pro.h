@@ -7,8 +7,7 @@
 // at 60 MHz SPI, mode 3). Note the NM-TV-154 pins in board_esp32.h
 // (GPIO 13/14/15/19/21) are a DIFFERENT board and do not apply here.
 //
-// The board also has a capacitive touch button on GPIO 32 (ESP32 T9); the
-// firmware has no button handling yet, so it is unused.
+// The board also has a capacitive touch button on GPIO 32 (ESP32 T9).
 #pragma once
 
 #define TFT_SCLK   18
@@ -27,3 +26,8 @@
 // No ambient-light sensor on this board -> auto-brightness compiled out.
 #define HAS_LDR     0
 #define ADC_MAX  4095   // classic ESP32 ADC is 12-bit (unused while HAS_LDR == 0)
+
+// One-button input: short tap dismisses a notification; hold opens/selects the
+// on-device app menu. Other boards compile the same source with this disabled.
+#define HAS_TOUCH_BUTTON 1
+#define TOUCH_BUTTON_PIN 32

@@ -17,6 +17,7 @@ class NotifyMode : public DisplayMode {
 
   bool     request(const char* state, uint32_t ttlSec, const char* label);
   bool     active() const;
+  void     dismiss();
   uint32_t heldMs() const { return millis() - startedMs_; }
 
  private:

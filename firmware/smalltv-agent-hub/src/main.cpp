@@ -9,6 +9,7 @@
 //
 // License: WTFPL
 #include <Arduino.h>
+#include <Arduino_GFX_Library.h>
 #include "Platform.h"
 #include "config.h"
 #include "Settings.h"
@@ -19,6 +20,7 @@
 #include "Mode.h"
 #include "Clock.h"
 #include "WgClient.h"
+#include "TouchButton.h"
 #if WITH_NOTIFY
 #include "NotifyMode.h"
 #endif
@@ -110,6 +112,92 @@ static DisplayMode* activeMode(const Settings& s) {
 }
 
 static Settings g_settings;
+
+#if HAS_TOUCH_BUTTON
+// ---- one-button app menu --------------------------------------------------
+// The Pro has a single capacitive input, so the interaction deliberately stays
+// tiny: hold to enter, tap to move, hold to choose. A timeout exits unchanged.
+static bool     g_touchMenuOpen = false;
+static size_t   g_touchMenuIndex = 0;
+static uint32_t g_touchMenuActivity = 0;
+
+static const char* touchModeLabel(uint8_t mode) {
+  switch (mode) {
+    case MODE_AGENTS:   return "Agent Hub";
+    case MODE_STOCKS:   return "Ticker";
+    case MODE_USAGE:    return "Clawdmeter";
+    case MODE_RADAR:    return "Radar";
+    case MODE_HA:       return "Home Assistant";
+    case MODE_CAROUSEL: return "Carousel";
+    default:            return "App";
+  }
+}
+
+static size_t touchMenuCount() { return kModeCount + 1; }
+
+static uint8_t touchMenuMode(size_t index) {
+  return index < kModeCount ? kModes[index]->modeConst() : MODE_CAROUSEL;
+}
+
+static void drawTouchMenu() {
+  Arduino_GFX* gfx = gfxDev();
+  if (!gfx) return;
+
+  gfx->fillScreen(C_BLACK);
+  gfxDrawCentered("CHOOSE APP", 8, 2, C_WHITE);
+  gfxDrawCentered("tap next - hold select", 29, 1, C_GRAY);
+
+  for (size_t i = 0; i < touchMenuCount(); i++) {
+    const int y = 50 + (int)i * 27;
+    if (i == g_touchMenuIndex) {
+      gfx->fillRect(10, y - 5, TFT_WIDTH - 20, 22, C_BLUE);
+      gfxDrawCentered(touchModeLabel(touchMenuMode(i)), y, 2, C_WHITE);
+    } else {
+      gfxDrawCentered(touchModeLabel(touchMenuMode(i)), y, 2, C_GRAY);
+    }
+  }
+  gfxDrawCentered("15 sec to cancel", 224, 1, C_DGRAY);
+}
+
+static void openTouchMenu() {
+  g_touchMenuIndex = kModeCount;  // Carousel is the final row.
+  for (size_t i = 0; i < kModeCount; i++) {
+    if (kModes[i]->modeConst() == g_settings.mode) {
+      g_touchMenuIndex = i;
+      break;
+    }
+  }
+  g_touchMenuOpen = true;
+  g_touchMenuActivity = millis();
+  drawTouchMenu();
+}
+
+static void closeTouchMenu(bool choose) {
+  if (choose) {
+    g_settings.mode = touchMenuMode(g_touchMenuIndex);
+    saveSettings(g_settings);
+    if (g_settings.mode == MODE_CAROUSEL) g_carIdx = 0;
+    g_carSwitch = 0;
+  }
+
+  g_touchMenuOpen = false;
+  DisplayMode* m = activeMode(g_settings);
+  if (m) m->wake(g_settings);
+}
+
+static void serviceTouchMenu(TouchButtonEvent event) {
+  if (event == TOUCH_EVENT_SHORT) {
+    g_touchMenuIndex = (g_touchMenuIndex + 1) % touchMenuCount();
+    g_touchMenuActivity = millis();
+    drawTouchMenu();
+  } else if (event == TOUCH_EVENT_LONG) {
+    closeTouchMenu(true);
+  } else if (millis() - g_touchMenuActivity >= TOUCH_MENU_TIMEOUT_MS) {
+    closeTouchMenu(false);
+  }
+}
+#endif
+
 static String   g_resetReason;        // why the chip last reset (diagnostics)
 static bool     g_safeMode = false;   // last reset was an exception -> don't re-enter the crash
 static char     g_epcStr[16] = "";
@@ -230,6 +318,10 @@ void setup() {
 
   Serial.println("[boot] modes");
   for (size_t i = 0; i < kModeCount; i++) kModes[i]->begin(g_settings);
+#if HAS_TOUCH_BUTTON
+  Serial.println("[boot] touch");
+  touchButtonBegin();
+#endif
   Serial.println("[boot] done");
 
   if (netMode() == NET_AP) {
@@ -283,10 +375,44 @@ void loop() {
   clockService(g_settings);
   appApplyBrightness();
 
+#if WITH_NOTIFY
+  static bool wasNotifying = false;
+#endif
+
+#if HAS_TOUCH_BUTTON
+  const TouchButtonEvent touchEvent = touchButtonPoll();
+  if (g_touchMenuOpen) {
+    serviceTouchMenu(touchEvent);
+    delay(5);
+    return;
+  }
+
+  if (touchEvent == TOUCH_EVENT_LONG) {
+#if WITH_NOTIFY
+    if (g_notifyMode.active()) {
+      wasNotifying = true;
+      g_notifyMode.dismiss();
+    }
+#endif
+    openTouchMenu();
+    delay(5);
+    return;
+  }
+
+#if WITH_NOTIFY
+  // A tap has one useful, low-risk action on the normal screen: acknowledge an
+  // attention overlay. Otherwise it does nothing, so brushing the case cannot
+  // unexpectedly switch apps.
+  if (touchEvent == TOUCH_EVENT_SHORT && g_notifyMode.active()) {
+    wasNotifying = true;
+    g_notifyMode.dismiss();
+  }
+#endif
+#endif
+
   // On expiry the carousel dwell is credited back the time it was hidden, so it
   // resumes on the same feature with the same remaining slice.
 #if WITH_NOTIFY
-  static bool wasNotifying = false;
   if (g_notifyMode.active()) {
     wasNotifying = true;
     g_notifyMode.service(g_settings);

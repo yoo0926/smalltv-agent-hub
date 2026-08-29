@@ -30,6 +30,18 @@ Content-Type: application/json
 `state` is `done` or `waiting`. Both endpoints follow the web UI's digest-auth
 setting. The bundled Mac bridge currently expects that setting to remain off.
 
+## SmallTV Pro touch controls
+
+The top capacitive button is intentionally limited to a few predictable actions:
+
+- Tap while a full-screen notification is visible to dismiss it.
+- Hold for about one second to open the app menu.
+- In the menu, tap to move to the next app and hold to select it.
+- Leave the menu untouched for 15 seconds to cancel without changing apps.
+
+The selected app is saved and survives a reboot. Touch readings are calibrated
+at boot and reported under `touch` in `GET /api/status` for diagnostics.
+
 ## Build and install
 
 ```bash

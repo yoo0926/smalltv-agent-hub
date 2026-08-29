@@ -19,6 +19,7 @@
 #endif
 #include "Clock.h"
 #include "WgClient.h"
+#include "TouchButton.h"
 #if WITH_HA
 #include "HaScreens.h"
 #include "MqttClient.h"
@@ -84,6 +85,7 @@ static void handleGetConfig() {
   feat["radar"]  = (bool)WITH_RADAR;
   feat["ha"]     = (bool)WITH_HA;
   feat["agents"] = (bool)WITH_AGENTS;
+  feat["touch"]  = (bool)HAS_TOUCH_BUTTON;
   // WireGuard is a per-chip decision rather than a per-feature one: it is
   // compiled only where the image has room for it (the ESP32-C2 build).
 #if defined(SMALLTV_WIREGUARD)
@@ -94,6 +96,8 @@ static void handleGetConfig() {
   // Which chip this build runs on (the UI warns about per-chip limitations).
 #if defined(SMALLTV_ESP32C2)
   root["chip"] = "esp32c2";
+#elif defined(SMALLTV_ESP32_PRO)
+  root["chip"] = "esp32-pro";
 #elif defined(SMALLTV_ESP32)
   root["chip"] = "esp32";
 #else
@@ -128,6 +132,15 @@ static void handleStatus() {
   o["nightHeld"] = clockNightHeld();      // in the window but waiting for a fresh NTP sync
   o["clockFresh"] = clockTrusted();       // last NTP sync within the trust window
   wgStatusJson(o["wg"].to<JsonObject>()); // tunnel state (compiledIn=false where it isn't built)
+  {
+    JsonObject t = o["touch"].to<JsonObject>();
+    t["available"] = touchButtonAvailable();
+    t["raw"] = touchButtonRaw();
+    t["baseline"] = touchButtonBaseline();
+    t["triggerDelta"] = touchButtonTriggerDelta();
+    t["pressed"] = touchButtonPressed();
+    t["lastEvent"] = touchButtonLastEvent();
+  }
 
 #if WITH_TICKER
   JsonArray arr = o["tickers"].to<JsonArray>();
