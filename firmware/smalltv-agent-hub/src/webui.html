@@ -35,6 +35,9 @@ button.btn{background:var(--acc);color:#04130a;border:0;padding:10px 16px;border
 button.btn.sec{background:#222b36;color:var(--fg)}
 button.btn.danger{background:var(--red);color:#1a0606}
 button.btn:disabled{opacity:.5}
+.quick{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.quick .btn{width:100%;background:#222b36;color:var(--fg);padding:11px 8px}
+.quick .btn.active{background:var(--acc2);color:#fff}
 .muted{color:var(--mut);font-size:13px}
 table{width:100%;border-collapse:collapse}
 td{padding:6px 4px}
@@ -65,6 +68,17 @@ small.hint{display:block;color:var(--mut);margin-top:4px;font-size:12px}
 <main>
  <!-- STATUS -->
  <section id="status" class="tab active">
+  <div class="card"><h2>Open app</h2>
+   <div class="quick" id="quickModes">
+    <button class="btn" data-mode="agents" onclick="activateMode('agents')">Agent Hub</button>
+    <button class="btn" data-mode="stocks" onclick="activateMode('stocks')">Ticker</button>
+    <button class="btn" data-mode="usage" onclick="activateMode('usage')">Clawdmeter</button>
+    <button class="btn" data-mode="radar" onclick="activateMode('radar')">Radar</button>
+    <button class="btn" data-mode="ha" onclick="activateMode('ha')">Home Assistant</button>
+    <button class="btn" data-mode="carousel" onclick="activateMode('carousel')">Carousel</button>
+   </div>
+   <small class="hint">Opens the selected app immediately and keeps it selected after a reboot.</small>
+  </div>
   <div class="card"><h2>Device</h2><div id="statusBox" class="muted">Loading...</div></div>
  </section>
 
@@ -404,12 +418,14 @@ function fillTz(){var s=$('tz');if(!s)return;var keys=Object.keys(TZMAP).filter(
  keys.sort();s.innerHTML='<option value="">UTC</option>'+keys.map(function(k){return '<option value="'+k+'">'+k+'</option>'}).join('');}
 
 var MODEOPT={ticker:'stocks',usage:'usage',radar:'radar',ha:'ha',agents:'agents'};
+var MODELABEL={agents:'Agent Hub',stocks:'Ticker',usage:'Clawdmeter',radar:'Radar',ha:'Home Assistant',carousel:'Carousel'};
 var CAROPT={ticker:'carouselTicker',usage:'carouselUsage',radar:'carouselRadar',ha:'carouselHa',agents:'carouselAgents'};
 function hideFeat(name){
  var b=document.querySelector('nav button[data-t="'+name+'"]'); if(b)b.remove();
  var sec=$(name); if(sec)sec.remove();
  var o=document.querySelector('#mode option[value="'+MODEOPT[name]+'"]'); if(o)o.remove();
  var c=$(CAROPT[name]); if(c)c.closest('.chk').remove();
+ var q=document.querySelector('#quickModes button[data-mode="'+MODEOPT[name]+'"]'); if(q)q.remove();
 }
 function modeChanged(){if(!$('mode'))return;
  $('carouselRow').style.display=$('mode').value==='carousel'?'block':'none';}
@@ -449,7 +465,7 @@ function loadConfig(){return j('/api/config').then(function(c){C=c;
  sv('colorOrder',dp.colorOrder||'auto'); sc('colorInvert',!!dp.invert);
  setGain('rGain','rgVal',dp.rGain); setGain('gGain','ggVal',dp.gGain); setGain('bGain','bgVal',dp.bGain);
  // header chip = which chip this firmware was built for
- var chipName={esp8266:'ESP8266',esp32c2:'ESP32-C2',esp32:'ESP32'}[c.chip]||'';
+ var chipName={esp8266:'ESP8266',esp32c2:'ESP32-C2',esp32:'ESP32','esp32-pro':'ESP32 Pro'}[c.chip]||'';
  var chE=$('chip'); if(chE&&chipName){chE.textContent=chipName;chE.style.display='inline-block';}
  // clock slice
  fillTz(); var ck=c.clock||{};
@@ -630,6 +646,16 @@ function saveWifi(){
  });
 }
 
+function markQuickMode(mode){document.querySelectorAll('#quickModes button').forEach(function(b){
+ b.classList.toggle('active',b.dataset.mode===mode);});}
+function activateMode(mode){var bs=document.querySelectorAll('#quickModes button');
+ bs.forEach(function(b){b.disabled=true});
+ j('/api/mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:mode})})
+ .then(function(r){if(!r.ok)throw new Error(r.error||'switch failed');
+  bs.forEach(function(b){b.disabled=false});sv('mode',r.mode);modeChanged();markQuickMode(r.mode);toast('Opened '+(MODELABEL[r.mode]||r.mode));loadStatus();})
+ .catch(function(){bs.forEach(function(b){b.disabled=false});toast('Could not switch app')});
+}
+
 // wifi networks (up to 4)
 function renderWifi(arr){var t=$('wifiTable');if(!t)return;t.innerHTML='';arr.forEach(addWifiRow);if(!arr.length)addWifiRow({})}
 function addWifiRow(o){var t=$('wifiTable');var tr=document.createElement('tr');tr.className='symrow';
@@ -683,6 +709,7 @@ function loadStatus(){j('/api/status').then(function(s){
  $('hi').textContent=s.mode==='ap'?'setup mode':(s.ip||'');
  var cn=$('clockNow'); if(cn){var ne=!!(C.clock&&C.clock.nightEnabled);var ns=s.night?'  · night mode active':(s.nightHeld?'  · night mode waiting for NTP':'');cn.textContent=!ne?'Clock: NTP runs only when night mode is on':('Clock: '+(s.synced?(s.time||'synced')+(s.tz?' ('+s.tz+')':''):'waiting for NTP...')+ns);}
  var fw=$('fwVer'); if(fw)fw.textContent=s.fw+' '+s.version;
+ markQuickMode(s.activeMode);
  // Surface the result of a boot-time GitHub update (ESP8266) once on first load,
  // so a failure that happened across the reboot is visible even if the original
  // System tab was closed. Don't clobber an in-progress check/update message.
@@ -690,7 +717,7 @@ function loadStatus(){j('/api/status').then(function(s){
  var fv=$('footVer'); if(fv)fv.textContent=' v'+s.version;
  if(s.repo){var rl=$('repoLink'); if(rl)rl.href=s.repo+'/releases'; var fr=$('footRepo'); if(fr)fr.href=s.repo;}
  $('statusBox').innerHTML=
-  kv('Firmware',s.fw+' '+s.version+(s.variant?' ('+s.variant+')':''))+kv('Mode',s.mode.toUpperCase())+
+  kv('Firmware',s.fw+' '+s.version+(s.variant?' ('+s.variant+')':''))+kv('App',MODELABEL[s.activeMode]||s.activeMode||'-')+kv('Network mode',s.mode.toUpperCase())+
   kv('Network',s.ssid||'-')+kv('IP',s.ip||'-')+kv('mDNS','http://'+(C.hostname||'smalltv')+'.local')+
   kv('Signal',s.rssi?s.rssi+' dBm':'-')+
   kv('Free heap',s.heap+' B'+(s.maxblk?' ('+s.maxblk+' B largest block)':''))+

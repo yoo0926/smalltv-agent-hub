@@ -242,6 +242,35 @@ void appInvalidate() {
   for (size_t i = 0; i < kModeCount; i++) kModes[i]->invalidate(g_settings);
 }
 
+// Immediate app switch for the web UI. Unlike saving the full settings form,
+// this also closes any local menu/notification so the requested app is visible
+// on the very next display tick. The selected app remains the boot default.
+bool appActivateMode(uint8_t mode) {
+  bool supported = mode == MODE_CAROUSEL;
+  for (size_t i = 0; i < kModeCount; i++) {
+    if (kModes[i]->modeConst() == mode) {
+      supported = true;
+      break;
+    }
+  }
+  if (!supported) return false;
+
+#if WITH_NOTIFY
+  g_notifyMode.dismiss();
+#endif
+#if HAS_TOUCH_BUTTON
+  g_touchMenuOpen = false;
+#endif
+  g_settings.mode = mode;
+  saveSettings(g_settings);
+  if (mode == MODE_CAROUSEL) g_carIdx = 0;
+  g_carSwitch = 0;
+
+  DisplayMode* m = activeMode(g_settings);
+  if (m) m->wake(g_settings);
+  return true;
+}
+
 static void bootProgress(const char* msg) {
   gfxBoot("SmallTV", msg);
 }

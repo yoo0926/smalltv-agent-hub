@@ -42,6 +42,10 @@ The top capacitive button is intentionally limited to a few predictable actions:
 The selected app is saved and survives a reboot. Touch readings are calibrated
 at boot and reported under `touch` in `GET /api/status` for diagnostics.
 
+The web dashboard's **Status** tab provides the same app choices as direct
+buttons. Selecting one calls `POST /api/mode`, closes any notification or touch
+menu, displays that app immediately, and saves it as the reboot default.
+
 ## Build and install
 
 ```bash

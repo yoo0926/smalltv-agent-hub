@@ -27,6 +27,7 @@
 
 // Defined in main.cpp — re-init every mode + force a repaint after a config change.
 extern void appInvalidate();
+extern bool appActivateMode(uint8_t mode);  // switch immediately + persist
 extern const char* appResetReason();   // last reset reason (diagnostics)
 extern void appApplyBrightness();   // main.cpp: re-resolve effective brightness now
 
@@ -64,6 +65,38 @@ static void sendJson(JsonDocument& doc, int code = 200) {
   String out;
   serializeJson(doc, out);
   server.send(code, "application/json", out);
+}
+
+static const char* appModeName(uint8_t mode) {
+  switch (mode) {
+    case MODE_AGENTS:   return "agents";
+    case MODE_STOCKS:   return "stocks";
+    case MODE_USAGE:    return "usage";
+    case MODE_RADAR:    return "radar";
+    case MODE_HA:       return "ha";
+    case MODE_CAROUSEL: return "carousel";
+    default:            return "unknown";
+  }
+}
+
+static bool appModeFromName(const char* name, uint8_t& mode) {
+#if WITH_AGENTS
+  if (!strcmp(name, "agents")) { mode = MODE_AGENTS; return true; }
+#endif
+#if WITH_TICKER
+  if (!strcmp(name, "stocks")) { mode = MODE_STOCKS; return true; }
+#endif
+#if WITH_USAGE
+  if (!strcmp(name, "usage")) { mode = MODE_USAGE; return true; }
+#endif
+#if WITH_RADAR
+  if (!strcmp(name, "radar")) { mode = MODE_RADAR; return true; }
+#endif
+#if WITH_HA
+  if (!strcmp(name, "ha")) { mode = MODE_HA; return true; }
+#endif
+  if (!strcmp(name, "carousel")) { mode = MODE_CAROUSEL; return true; }
+  return false;
 }
 
 static void handleRoot() {
@@ -116,6 +149,7 @@ static void handleStatus() {
   o["repo"] = REPO_URL;
   if (g_updateMsg.length()) o["updateMsg"] = g_updateMsg;
   o["mode"] = (netMode() == NET_AP) ? "ap" : "sta";
+  o["activeMode"] = appModeName(S->mode);
   o["connected"] = netConnected();
   o["ssid"] = netSSID();
   o["ip"] = netIP();
@@ -193,6 +227,29 @@ static void handleStatus() {
 #endif
 
   sendJson(doc);
+}
+
+static void handleActivateMode() {
+  if (!requireAuth()) return;
+  if (!server.hasArg("plain")) { server.send(400, "application/json", "{\"ok\":false,\"error\":\"no body\"}"); return; }
+
+  JsonDocument doc;
+  if (deserializeJson(doc, server.arg("plain"))) {
+    server.send(400, "application/json", "{\"ok\":false,\"error\":\"bad json\"}");
+    return;
+  }
+
+  const char* name = doc["mode"] | "";
+  uint8_t mode = 0;
+  if (!appModeFromName(name, mode) || !appActivateMode(mode)) {
+    server.send(400, "application/json", "{\"ok\":false,\"error\":\"unsupported mode\"}");
+    return;
+  }
+
+  JsonDocument res;
+  res["ok"] = true;
+  res["mode"] = appModeName(mode);
+  sendJson(res);
 }
 
 // Fingerprint of everything network-identity related: the WiFi list and the
@@ -498,6 +555,7 @@ void webPortalBegin(Settings& settings) {
   server.on("/", HTTP_GET, handleRoot);
   server.on("/api/config", HTTP_GET, handleGetConfig);
   server.on("/api/config", HTTP_POST, handlePostConfig);
+  server.on("/api/mode", HTTP_POST, handleActivateMode);
   server.on("/api/status", HTTP_GET, handleStatus);
   server.on("/api/scan", HTTP_GET, handleScan);
   server.on("/api/reboot", HTTP_POST, handleReboot);

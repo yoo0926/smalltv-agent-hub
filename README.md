@@ -13,6 +13,7 @@ Local-only status bridge for Conductor sessions running Claude Code and Codex. T
 - Dependency-free Python service running on Homebrew Python 3.14, with Python 3.9+ compatibility and persisted local state
 - Asynchronous push to `POST /api/agents`, plus full-screen `done` / `needs_input` alerts through `POST /api/notify`
 - SmallTV Pro touch controls: tap to dismiss an alert; hold to open the app menu, tap to move, and hold to select
+- Web dashboard app shortcuts that switch the display immediately and persist the selection
 
 `TaskCompleted` is treated as progress rather than ending the main Claude session, because it can refer to a subtask or teammate. The Claude `Stop` hook is the authoritative turn-complete event.
 
