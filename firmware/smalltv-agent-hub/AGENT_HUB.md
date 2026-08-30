@@ -72,7 +72,7 @@ disables the save button to prevent duplicate submissions.
 
 ## Build and install
 
-From the repository root on macOS, the recommended clean setup and build is:
+From the repository root on macOS, the recommended clean firmware build is:
 
 ```bash
 ./scripts/bootstrap_macos.sh --build

@@ -1,9 +1,9 @@
-# Repository settings review
+# Repository settings
 
-Reviewed against the GitHub repository on 2026-08-30.
+These are the intended repository settings and maintenance policy.
 
-- The repository remains private; changing visibility is the final explicit
-  owner action.
+- Visibility changes are explicit owner actions; project scripts and CI never
+  change repository access.
 - `main` is the default branch.
 - Issues are enabled. Wiki, Pages, and legacy Downloads are disabled.
 - The repository description identifies the local Conductor/SmallTV Pro scope.
@@ -19,7 +19,6 @@ Reviewed against the GitHub repository on 2026-08-30.
 
 The source-controlled workflow permissions remain safe even if the account's
 default Actions token permission changes later. A future release workflow must
-request write permission only for its release job. GitHub private vulnerability
-reporting cannot be enabled while this repository is private; enable it
-immediately after the visibility change so the route documented in
-`SECURITY.md` becomes available.
+request write permission only for its release job. Enable GitHub private
+vulnerability reporting for the public repository so the route documented in
+`SECURITY.md` remains available.

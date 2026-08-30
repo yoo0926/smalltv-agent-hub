@@ -68,6 +68,10 @@ Install only a CI or release OTA image that you selected explicitly.
 
 ## Device integration
 
+Use the [root README](../../README.md)'s two-step macOS build and interactive
+setup for the normal Conductor integration. The endpoints below document the
+device-side contract for custom clients and troubleshooting.
+
 The firmware accepts privacy-minimized session state from the Mac bridge:
 
 ```http

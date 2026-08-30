@@ -66,6 +66,15 @@ setup은 Claude 훅, Codex 알림, 사용자 로그인 서비스의 설치 여�
 [`.env.example`](.env.example)에 있으며, 개인 기기 주소는 대상 Mac에서
 입력하기 전까지 의도적으로 비워 둡니다.
 
+로컬 기본값은 다음 네 가지입니다.
+
+- `DESK_HUB_DEVICE_URL`: SmallTV 기본 주소
+- `DESK_HUB_INSTALL_CLAUDE`: Claude Code 훅 설치 또는 갱신 여부
+- `DESK_HUB_INSTALL_CODEX`: Codex 알림 설치 또는 갱신 여부
+- `DESK_HUB_INSTALL_SERVICE`: macOS 로그인 서비스 설치 및 시작 여부
+
+세 설치 항목의 값에는 `true` 또는 `false`를 사용합니다.
+
 자동화된 설치에서는 `.env`를 편집한 뒤
 `./scripts/setup_macos.sh --non-interactive`를 실행할 수 있습니다. 저장이나
 실제 설치 없이 확인하려면 `--dry-run`을 사용하세요.
@@ -113,7 +122,10 @@ SmallTV가 Mac에서 데이터를 가져오는 구조가 아니라, 브리지가
 Home Assistant, Carousel이 포함됩니다. 데스크용 날씨 화면의 공간을
 확보하기 위해 upstream의 Plane Radar 화면은 의도적으로 제외했습니다.
 
-## 로컬 에이전트 훅 설치
+## 고급: 로컬 에이전트 훅만 수동으로 설치
+
+일반적인 설치에는 위의 대화형 setup을 사용하세요. 아래 저수준 명령은 훅
+설정만 미리 확인하거나 복구할 때 사용합니다.
 
 먼저 파일을 변경하지 않는 미리보기를 실행합니다.
 
@@ -145,7 +157,10 @@ python3 scripts/install_hooks.py --apply
 않고 같은 전역 훅을 사용할 수 있습니다. 모든 로컬 Claude/Codex 세션을
 의도적으로 모니터링할 때만 `DESK_HUB_CONDUCTOR_ONLY=0`을 설정하세요.
 
-## macOS에서 자동 실행
+## 고급: macOS 로그인 서비스만 수동으로 관리
+
+대화형 setup에서 해당 항목을 선택하면 이 서비스가 설치됩니다. 아래 명령은
+로그인 서비스만 확인하거나 재설치 또는 제거할 때 사용합니다.
 
 사용자 단위 LaunchAgent 설치 내용을 파일 변경 없이 확인합니다.
 
@@ -210,5 +225,5 @@ WTFPL v2 라이선스를 유지합니다. 가져온 revision과 표기는
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)를 참고하세요.
 
 보안 문제는 [`SECURITY.md`](SECURITY.md)의 절차에 따라 신고해야 합니다.
-저장소는 소유자가 [`PUBLIC_RELEASE_CHECKLIST.md`](PUBLIC_RELEASE_CHECKLIST.md)의
-마지막 공개 절차를 수행하기 전까지 비공개로 유지됩니다.
+저장소 공개와 소유자 설정 절차는
+[`PUBLIC_RELEASE_CHECKLIST.md`](PUBLIC_RELEASE_CHECKLIST.md)를 참고하세요.

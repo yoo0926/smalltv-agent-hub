@@ -13,10 +13,9 @@ Flask app, a static file…). Two ready-to-import n8n workflows are included:
   from Yahoo Finance, the same endpoint the firmware calls on its own.
 - [`smalltv-stock-webhook-cash.json`](smalltv-stock-webhook-cash.json) routes
   cash.ch listing keys (symbols like `123456789-246-333`) to cash.ch's public
-  GraphQL API and everything else to Yahoo. Since firmware 2.4.0 each ticker
-  picks its own source directly on the device, so this workflow is only needed
-  if you want webhook tickers to cover both, e.g. to add caching or massage
-  the data.
+  GraphQL API and everything else to Yahoo. Each ticker picks its own source
+  directly on the device, so this workflow is only needed if you want webhook
+  tickers to cover both, for example to add caching or transform the data.
 
 Import one or the other: both use the webhook path `stock`, so n8n will refuse
 to activate them side by side.
@@ -96,10 +95,9 @@ The example maps the timeframe to a candle interval like this:
 | `1y` / `2y` | 1wk |
 | `5y` / `max` | 1mo |
 
-### HTTPS note for the ESP8266
+### HTTPS note
 
-The ESP8266 can do HTTPS, but TLS is RAM-hungry. If you hit instability, expose
-the webhook over plain **HTTP on your LAN** (the device is LAN-only anyway) and
-set the webhook URL to `http://…`. The firmware auto-detects `http`/`https` from the
-URL scheme; HTTPS is validated *insecurely* (no certificate check), which is fine
-for a self-hosted endpoint on your own network.
+The SmallTV Pro firmware auto-detects `http` or `https` from the webhook URL.
+HTTPS certificate validation is disabled on the device, so use only an endpoint
+you control on a trusted network. Plain HTTP is also suitable for a LAN-only
+self-hosted webhook.

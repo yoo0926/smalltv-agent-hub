@@ -1,15 +1,14 @@
 # Releasing
 
 The repository does not publish a release merely because code was pushed or a
-tag was created. This avoids distributing an unreviewed firmware image while
-the project is private.
+tag was created. Releases are created only from a reviewed commit whose full CI
+run produced the firmware artifacts.
 
-## Before the first public release
+## Repository publication
 
-The MIT license and GitHub private vulnerability-reporting route are already
-represented in the repository. Complete the two owner actions in
-`PUBLIC_RELEASE_CHECKLIST.md`: make the repository public, then immediately
-enable private vulnerability reporting in GitHub's Advanced Security settings.
+Follow the owner actions in `PUBLIC_RELEASE_CHECKLIST.md`: make the repository
+public, then enable private vulnerability reporting in GitHub's Advanced
+Security settings. Repository publication does not create a firmware release.
 
 ## Prepare a version
 

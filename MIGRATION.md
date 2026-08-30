@@ -45,13 +45,13 @@ backed up before an applied change.
 | Data | Location | Move it? |
 | --- | --- | --- |
 | Agent history, session IDs, worktree paths, logs | `.runtime/` | No. It is ephemeral and may contain private project metadata. |
-| Codex notifier forwarding state | `.runtime/codex-forward.json` | No. Re-run the hook installer. |
+| Codex notifier forwarding state | `.runtime/codex-forward.json` | No. Run the interactive setup again. |
 | Interactive setup defaults | `.env` | Usually no. Run setup again so the device URL and choices match the new Mac. |
 | Python and PlatformIO environments | `firmware/smalltv-agent-hub/.venv`, `.pio-core`, `.pio` | No. The bootstrap reconstructs them. |
 | Reference clones and scratch files | `references/`, `tmp/` | No. They are research/build material, not project inputs. |
 | Compiled firmware | `dist/` and `*.bin` | No. Rebuild it or download a CI/release artifact. |
-| Claude and Codex hooks | `~/.claude/settings.json`, `~/.codex/config.toml` | Do not copy wholesale. Run `scripts/install_hooks.py --apply` so other settings are preserved. |
-| Login service | `~/Library/LaunchAgents/com.geekmagic.desk-hub.plist` | No. Reinstall it so paths and the device URL match the new Mac. |
+| Claude and Codex hooks | `~/.claude/settings.json`, `~/.codex/config.toml` | Do not copy wholesale. The interactive setup merges the hooks while preserving other settings. |
+| Login service | `~/Library/LaunchAgents/com.geekmagic.desk-hub.plist` | No. The interactive setup recreates it with the new clone path and device URL. |
 | Wi-Fi, ticker, weather, display, and web-auth settings | SmallTV flash | They remain on the existing device. Configure them again in the web UI only for a new or erased device. |
 | Stock-firmware backup | local backup directory only | Never commit or publish it. Treat any embedded Wi-Fi or auth data as credentials. |
 

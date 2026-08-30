@@ -1,5 +1,7 @@
+import re
 import unittest
 from pathlib import Path
+from urllib.parse import unquote
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -7,6 +9,35 @@ FIRMWARE = ROOT / "firmware" / "smalltv-agent-hub"
 
 
 class ReleaseReadinessTests(unittest.TestCase):
+    def test_relative_markdown_links_resolve(self):
+        ignored_parts = {
+            ".git",
+            ".pio",
+            ".pio-core",
+            ".venv",
+            "references",
+            "tmp",
+        }
+        documents = [
+            path
+            for path in ROOT.rglob("*.md")
+            if not ignored_parts.intersection(path.relative_to(ROOT).parts)
+        ]
+        pattern = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
+        for document in documents:
+            text = document.read_text(encoding="utf-8")
+            for raw_target in pattern.findall(text):
+                target = raw_target.strip().split()[0].strip("<>")
+                if not target or target.startswith(
+                    ("#", "http://", "https://", "mailto:")
+                ):
+                    continue
+                relative = unquote(target.split("#", 1)[0])
+                self.assertTrue(
+                    (document.parent / relative).exists(),
+                    f"broken link in {document.relative_to(ROOT)}: {target}",
+                )
+
     def test_firmware_identity_points_to_this_repository(self):
         config = (FIRMWARE / "src" / "config.h").read_text(encoding="utf-8")
         self.assertIn('#define SELF_UPDATE_ENABLED 0', config)
@@ -66,6 +97,38 @@ class ReleaseReadinessTests(unittest.TestCase):
             self.assertIn(f"[English]({english_name})", korean)
             self.assertIn("./scripts/bootstrap_macos.sh --build", korean)
             self.assertIn("./scripts/setup_macos.sh", korean)
+
+    def test_all_onboarding_docs_use_the_current_two_step_flow(self):
+        names = (
+            "README.md",
+            "README.ko.md",
+            "MIGRATION.md",
+            "MIGRATION.ko.md",
+            "CONTRIBUTING.md",
+            "PUBLIC_RELEASE_CHECKLIST.md",
+        )
+        for name in names:
+            text = (ROOT / name).read_text(encoding="utf-8")
+            self.assertNotIn("--install-hooks", text, name)
+            self.assertNotIn("--install-service", text, name)
+            self.assertNotIn("bootstrap_macos.sh --device-url", text, name)
+        for name in (
+            "README.md",
+            "README.ko.md",
+            "MIGRATION.md",
+            "MIGRATION.ko.md",
+        ):
+            text = (ROOT / name).read_text(encoding="utf-8")
+            self.assertIn("./scripts/bootstrap_macos.sh --build", text, name)
+            self.assertIn("./scripts/setup_macos.sh", text, name)
+
+    def test_publication_docs_are_timeless(self):
+        checklist = (ROOT / "PUBLIC_RELEASE_CHECKLIST.md").read_text(
+            encoding="utf-8"
+        )
+        settings = (ROOT / "REPOSITORY_SETTINGS.md").read_text(encoding="utf-8")
+        self.assertNotIn("CI run #", checklist)
+        self.assertNotIn("Reviewed against", settings)
 
 
 if __name__ == "__main__":

@@ -48,13 +48,13 @@ Mac과 SmallTV가 같은 네트워크에 연결되면 알림 훅과 로그인 �
 | 데이터 | 위치 | 옮겨야 하나요? |
 | --- | --- | --- |
 | 에이전트 기록, 세션 ID, worktree 경로, 로그 | `.runtime/` | 아니요. 일시적인 데이터이며 비공개 프로젝트 메타데이터가 포함될 수 있습니다. |
-| Codex 알림 전달 상태 | `.runtime/codex-forward.json` | 아니요. 훅 설치 프로그램을 다시 실행하세요. |
+| Codex 알림 전달 상태 | `.runtime/codex-forward.json` | 아니요. 대화형 setup을 다시 실행하세요. |
 | 대화형 setup 기본값 | `.env` | 일반적으로 아니요. 새 Mac에 맞는 기기 주소와 설치 항목을 setup에서 다시 선택하세요. |
 | Python과 PlatformIO 환경 | `firmware/smalltv-agent-hub/.venv`, `.pio-core`, `.pio` | 아니요. 부트스트랩이 다시 생성합니다. |
 | 참고 저장소와 임시 파일 | `references/`, `tmp/` | 아니요. 프로젝트 입력이 아닌 조사·빌드 자료입니다. |
 | 컴파일된 펌웨어 | `dist/`와 `*.bin` | 아니요. 다시 빌드하거나 CI/릴리스 산출물을 받으세요. |
-| Claude와 Codex 훅 | `~/.claude/settings.json`, `~/.codex/config.toml` | 전체 파일을 복사하지 마세요. 다른 설정을 보존하도록 `scripts/install_hooks.py --apply`를 실행하세요. |
-| 로그인 서비스 | `~/Library/LaunchAgents/com.geekmagic.desk-hub.plist` | 아니요. 새 Mac의 경로와 기기 주소에 맞게 다시 설치하세요. |
+| Claude와 Codex 훅 | `~/.claude/settings.json`, `~/.codex/config.toml` | 전체 파일을 복사하지 마세요. 대화형 setup이 다른 설정을 보존하면서 훅을 병합합니다. |
+| 로그인 서비스 | `~/Library/LaunchAgents/com.geekmagic.desk-hub.plist` | 아니요. 대화형 setup이 새 저장소 경로와 기기 주소로 다시 생성합니다. |
 | Wi-Fi, 티커, 날씨, 화면, 웹 인증 설정 | SmallTV 플래시 | 같은 기기에는 그대로 남습니다. 새 기기나 초기화한 기기에서만 웹 UI로 다시 설정하세요. |
 | stock 펌웨어 백업 | 별도의 로컬 백업 폴더 | 절대 커밋하거나 공개하지 마세요. 포함된 Wi-Fi 또는 인증 데이터는 인증 정보로 취급하세요. |
 

@@ -52,6 +52,15 @@ answers to the Git-ignored `.env`; later runs use them as defaults. Safe initial
 defaults live in [`.env.example`](.env.example), while a device URL is
 deliberately left blank until supplied on the target Mac.
 
+The local defaults are:
+
+- `DESK_HUB_DEVICE_URL`: SmallTV base URL;
+- `DESK_HUB_INSTALL_CLAUDE`: install or refresh Claude Code hooks;
+- `DESK_HUB_INSTALL_CODEX`: install or refresh Codex notifications;
+- `DESK_HUB_INSTALL_SERVICE`: install and start the macOS login service.
+
+The three installation switches accept `true` or `false`.
+
 For scripted provisioning, edit `.env` and run
 `./scripts/setup_macos.sh --non-interactive`. Use `--dry-run` to preview without
 saving settings or applying either installer.
@@ -93,7 +102,11 @@ The current SmallTV Pro build includes Agent Hub, Ticker, Clawdmeter, Weather,
 Home Assistant, and Carousel. The upstream plane-radar screen is intentionally
 excluded from this build to leave room for the desk-focused weather screen.
 
-## Install local agent hooks
+## Advanced: install local agent hooks manually
+
+The interactive setup above is the normal installation path. Use these
+lower-level commands only to preview or repair the hook configuration by
+itself.
 
 First inspect the changes without writing anything:
 
@@ -119,7 +132,10 @@ Start fresh Claude/Codex sessions in Conductor after installing. Existing sessio
 
 The hook ignores non-Conductor sessions by default. Conductor supplies `CONDUCTOR_IS_LOCAL=1`, `CONDUCTOR_WORKSPACE_NAME`, and `CONDUCTOR_WORKSPACE_PATH` to local agents, so the same global hook can be installed without mixing ordinary terminal sessions into the desk display. Set `DESK_HUB_CONDUCTOR_ONLY=0` only when you intentionally want to monitor every local Claude/Codex session.
 
-## Run automatically on macOS
+## Advanced: manage the macOS login service manually
+
+The interactive setup installs this service when that option is accepted. Use
+the commands below to inspect, reinstall, or remove only the login service.
 
 Preview the per-user launch agent installation:
 
@@ -177,6 +193,6 @@ WTFPL v2 license in
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the imported revision and
 attribution.
 
-Security reports must follow [`SECURITY.md`](SECURITY.md). The repository
-remains private until the owner performs the final publication steps in
+Security reports must follow [`SECURITY.md`](SECURITY.md). Publication and
+repository-owner settings are documented in
 [`PUBLIC_RELEASE_CHECKLIST.md`](PUBLIC_RELEASE_CHECKLIST.md).
