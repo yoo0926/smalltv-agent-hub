@@ -1,7 +1,8 @@
 # Public release checklist
 
-Technical preparation is complete. The repository remains private until the
-owner completes the three decisions at the end of this file.
+Technical preparation and policy decisions are complete. The repository
+remains private until the owner performs the publication actions at the end of
+this file.
 
 ## Completed technical work
 
@@ -29,15 +30,16 @@ owner completes the three decisions at the end of this file.
   `REPOSITORY_SETTINGS.md`.
 - [x] Ensure release instructions publish only clean source-built Agent Hub
   artifacts and never stock firmware or device settings.
+- [x] License the original Mac bridge and repository-level work under MIT while
+  retaining the firmware subtree's upstream WTFPL v2 license.
+- [x] Add `SECURITY.md` with GitHub private vulnerability reporting as the
+  coordinated disclosure route.
 
-## Owner decisions still required
+## Owner publication actions still required
 
-- [ ] Choose a license for the original Mac bridge and add it as root `LICENSE`.
-  MIT is the current recommendation. The firmware subtree retains upstream
-  WTFPL v2 under `firmware/smalltv-agent-hub/LICENSE`.
-- [ ] Choose a private security-reporting route: enable GitHub private
-  vulnerability reporting after publication, or provide a dedicated security
-  contact. Replace the placeholder in `SECURITY.md.template` and rename it to
-  `SECURITY.md`.
-- [ ] Change repository visibility from private to public only after the two
-  files above are complete. This must be an explicit owner action.
+- [ ] Change repository visibility from private to public. This must be an
+  explicit owner action.
+- [ ] Immediately afterward, open **Settings → Security → Advanced Security**
+  and enable **Private vulnerability reporting**. GitHub exposes this setting
+  only for public repositories; enabling it activates the private form linked
+  from `SECURITY.md`.

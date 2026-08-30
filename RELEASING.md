@@ -1,14 +1,15 @@
 # Releasing
 
 The repository does not publish a release merely because code was pushed or a
-tag was created. This avoids distributing unlicensed bridge code or an
-unreviewed firmware image while the project is private.
+tag was created. This avoids distributing an unreviewed firmware image while
+the project is private.
 
 ## Before the first public release
 
-Complete the three owner decisions in `PUBLIC_RELEASE_CHECKLIST.md`: choose the
-root license, choose a private vulnerability-reporting route, and change GitHub
-visibility only after both are represented in the repository.
+The MIT license and GitHub private vulnerability-reporting route are already
+represented in the repository. Complete the two owner actions in
+`PUBLIC_RELEASE_CHECKLIST.md`: make the repository public, then immediately
+enable private vulnerability reporting in GitHub's Advanced Security settings.
 
 ## Prepare a version
 

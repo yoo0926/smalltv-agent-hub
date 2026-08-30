@@ -58,6 +58,7 @@ photo or screenshot when it materially helps review.
 Root CI tests Python 3.9 and 3.14, checks repository hygiene and the generated
 web UI, and builds the `smalltv_esp32_8mb` target with pinned dependencies.
 
-The original bridge code does not yet have a public license. Contributions
-should not be solicited or accepted until a root license is chosen as described
-in `PUBLIC_RELEASE_CHECKLIST.md`.
+By contributing, you agree that repository-level and Mac bridge contributions
+are provided under the root MIT License. Changes within
+`firmware/smalltv-agent-hub/` remain under that subtree's WTFPL v2 license and
+must preserve the upstream attribution recorded in `THIRD_PARTY_NOTICES.md`.

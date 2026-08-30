@@ -159,10 +159,14 @@ The current GitHub configuration review is recorded in
 
 ## Licensing and upstream attribution
 
-The firmware is derived from [giovi321/smalltv-mod](https://github.com/giovi321/smalltv-mod) and retains its WTFPL v2 license in [`firmware/smalltv-agent-hub/LICENSE`](firmware/smalltv-agent-hub/LICENSE). See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the imported revision and attribution.
+The original Mac bridge and repository-level work are available under the
+[MIT License](LICENSE). The firmware is derived from
+[giovi321/smalltv-mod](https://github.com/giovi321/smalltv-mod) and retains its
+WTFPL v2 license in
+[`firmware/smalltv-agent-hub/LICENSE`](firmware/smalltv-agent-hub/LICENSE). See
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the imported revision and
+attribution.
 
-This repository is private for now. The Mac bridge does not yet have a public
-license; choose and add one before changing the repository visibility. A
-prepared [`SECURITY.md.template`](SECURITY.md.template) also needs the owner's
-private reporting route. Those remaining owner decisions are tracked in
+Security reports must follow [`SECURITY.md`](SECURITY.md). The repository
+remains private until the owner performs the final publication steps in
 [`PUBLIC_RELEASE_CHECKLIST.md`](PUBLIC_RELEASE_CHECKLIST.md).

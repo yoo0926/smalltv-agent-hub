@@ -48,6 +48,15 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("giovi321/smalltv-mod", notices)
         self.assertIn("giovi321/smalltv-mod", readme)
 
+    def test_root_license_and_security_policy_are_public_ready(self):
+        license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
+        security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+        self.assertTrue(license_text.startswith("MIT License\n"))
+        self.assertIn("Copyright (c) 2026 yoo0926", license_text)
+        self.assertIn("/security/advisories/new", security)
+        self.assertNotIn("REPLACE WITH", security)
+        self.assertFalse((ROOT / "SECURITY.md.template").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

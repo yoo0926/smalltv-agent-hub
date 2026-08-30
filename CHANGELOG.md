@@ -13,6 +13,8 @@ All notable user-visible changes are recorded here. The project follows
   the installed custom image.
 - Updated pinned GitHub Actions and made generated-web-UI verification work for
   both clean clones and consistent in-progress source changes.
+- Added the root MIT license and a security policy using GitHub private
+  vulnerability reporting for coordinated disclosure.
 
 ## 0.2.1 - 2026-08-30
 
