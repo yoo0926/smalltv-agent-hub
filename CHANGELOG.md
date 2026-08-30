@@ -5,6 +5,8 @@ All notable user-visible changes are recorded here. The project follows
 
 ## Unreleased
 
+- Split fresh-Mac onboarding into a repository-local build and an interactive
+  setup command with Git-ignored, reusable `.env` defaults.
 - Added reproducible macOS bootstrap, pinned firmware dependencies, root CI,
   repository hygiene checks, and public contribution templates.
 - Scoped project documentation and release artifacts to the tested GeekMagic

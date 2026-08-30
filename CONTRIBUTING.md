@@ -13,9 +13,9 @@ On macOS with Python 3.9 or newer:
 ./scripts/bootstrap_macos.sh --build
 ```
 
-The command creates only project-local build environments unless hook or
-service installation flags are explicitly supplied. See `MIGRATION.md` for the
-data that must remain outside Git.
+The command creates only project-local build environments. The separate
+`./scripts/setup_macos.sh` command performs machine-local hook and service
+installation. See `MIGRATION.md` for the data that must remain outside Git.
 
 For a quick bridge-only test:
 

@@ -65,6 +65,7 @@ class ReleaseReadinessTests(unittest.TestCase):
             self.assertIn(f"[한국어]({korean_name})", english)
             self.assertIn(f"[English]({english_name})", korean)
             self.assertIn("./scripts/bootstrap_macos.sh --build", korean)
+            self.assertIn("./scripts/setup_macos.sh", korean)
 
 
 if __name__ == "__main__":

@@ -22,27 +22,21 @@ cd smalltv-agent-hub
 
 부트스트랩은 프로젝트 전용 가상환경을 만들고,
 `requirements-dev.txt`에 고정된 PlatformIO 버전을 설치하고, 생성된 웹
-UI를 검증하고, 브리지 테스트를 실행하고, 선택적으로 SmallTV Pro
-이미지를 빌드합니다. 명시적인 설치 옵션을 주지 않으면 Claude, Codex,
-launchd 설정을 변경하지 않습니다.
+UI를 검증하고, 브리지 테스트를 실행하고, SmallTV Pro 이미지를
+빌드합니다. Claude, Codex 또는 launchd 설정은 변경하지 않습니다.
 
 Mac과 SmallTV가 같은 네트워크에 연결되면 알림 훅과 로그인 서비스를
 설치합니다. 네트워크에서 안정적으로 동작한다면 기기의 mDNS 이름을
 권장하며, 그렇지 않으면 현재 IP 주소를 사용하세요.
 
 ```bash
-./scripts/bootstrap_macos.sh \
-  --device-url http://smalltv-xxxx.local \
-  --install-hooks \
-  --install-service
+./scripts/setup_macos.sh
 ```
 
-완전히 새로 설정하는 경우 `--all`로 빌드와 두 설치 단계를 한 번에 실행할
-수 있습니다.
-
-```bash
-./scripts/bootstrap_macos.sh --device-url http://smalltv-xxxx.local --all
-```
+대화형 setup은 기본값을 대괄호 안에 표시합니다. 첫 실행에서 기기 주소와
+설치 선택을 Git에서 제외되는 `.env`에 기록하므로, 다음부터는 Enter를 눌러
+그대로 사용할 수 있습니다. 저장소의 `.env.example`에는 공개 가능한
+기본값만 있고 Mac별 기기 주소는 포함하지 않습니다.
 
 훅 설치 프로그램은 기존 Claude 훅을 보존해 병합하고 기존 Codex 알림
 명령을 연쇄 실행합니다. 이전 desk-hub 설치도 인식하여 저장소 위치가
@@ -55,6 +49,7 @@ Mac과 SmallTV가 같은 네트워크에 연결되면 알림 훅과 로그인 �
 | --- | --- | --- |
 | 에이전트 기록, 세션 ID, worktree 경로, 로그 | `.runtime/` | 아니요. 일시적인 데이터이며 비공개 프로젝트 메타데이터가 포함될 수 있습니다. |
 | Codex 알림 전달 상태 | `.runtime/codex-forward.json` | 아니요. 훅 설치 프로그램을 다시 실행하세요. |
+| 대화형 setup 기본값 | `.env` | 일반적으로 아니요. 새 Mac에 맞는 기기 주소와 설치 항목을 setup에서 다시 선택하세요. |
 | Python과 PlatformIO 환경 | `firmware/smalltv-agent-hub/.venv`, `.pio-core`, `.pio` | 아니요. 부트스트랩이 다시 생성합니다. |
 | 참고 저장소와 임시 파일 | `references/`, `tmp/` | 아니요. 프로젝트 입력이 아닌 조사·빌드 자료입니다. |
 | 컴파일된 펌웨어 | `dist/`와 `*.bin` | 아니요. 다시 빌드하거나 CI/릴리스 산출물을 받으세요. |

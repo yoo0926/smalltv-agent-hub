@@ -19,27 +19,21 @@ cd smalltv-agent-hub
 
 The bootstrap creates a project-local virtual environment, installs the exact
 PlatformIO version in `requirements-dev.txt`, verifies the generated web UI,
-runs the bridge tests, and optionally builds the SmallTV Pro image. It does not
-change Claude, Codex, or launchd configuration without an explicit install
-flag.
+runs the bridge tests, and builds the SmallTV Pro image. It never changes
+Claude, Codex, or launchd configuration.
 
 Once the Mac and SmallTV are on the same network, install the notification hooks
 and login service. Prefer the device's mDNS name if it is stable on the network;
 otherwise use its current IP address.
 
 ```bash
-./scripts/bootstrap_macos.sh \
-  --device-url http://smalltv-xxxx.local \
-  --install-hooks \
-  --install-service
+./scripts/setup_macos.sh
 ```
 
-For a completely new setup, `--all` combines the build and both installation
-steps:
-
-```bash
-./scripts/bootstrap_macos.sh --device-url http://smalltv-xxxx.local --all
-```
+The interactive setup displays defaults in brackets. Its first run records the
+device URL and installation choices in the Git-ignored `.env`; pressing Enter
+accepts those defaults on later runs. The checked-in `.env.example` contains
+only safe defaults and never a machine-specific device address.
 
 The hook installer merges with existing Claude hooks and chains an existing
 Codex notifier. It also recognizes a previous desk-hub installation and updates
@@ -52,6 +46,7 @@ backed up before an applied change.
 | --- | --- | --- |
 | Agent history, session IDs, worktree paths, logs | `.runtime/` | No. It is ephemeral and may contain private project metadata. |
 | Codex notifier forwarding state | `.runtime/codex-forward.json` | No. Re-run the hook installer. |
+| Interactive setup defaults | `.env` | Usually no. Run setup again so the device URL and choices match the new Mac. |
 | Python and PlatformIO environments | `firmware/smalltv-agent-hub/.venv`, `.pio-core`, `.pio` | No. The bootstrap reconstructs them. |
 | Reference clones and scratch files | `references/`, `tmp/` | No. They are research/build material, not project inputs. |
 | Compiled firmware | `dist/` and `*.bin` | No. Rebuild it or download a CI/release artifact. |

@@ -38,15 +38,23 @@ build the SmallTV Pro firmware with:
 ./scripts/bootstrap_macos.sh --build
 ```
 
-Nothing outside the repository is changed by default. After confirming the
-device URL, install the Conductor notification hooks and login service:
+The build does not change Claude, Codex, or launchd configuration. Configure
+this Mac in the second, interactive step:
 
 ```bash
-./scripts/bootstrap_macos.sh \
-  --device-url http://smalltv-xxxx.local \
-  --install-hooks \
-  --install-service
+./scripts/setup_macos.sh
 ```
+
+Setup asks whether to install the Claude hooks, Codex notifications, and the
+per-user login service, then asks for the SmallTV URL when the service is
+enabled. Press Enter to accept each value in brackets. The first run saves the
+answers to the Git-ignored `.env`; later runs use them as defaults. Safe initial
+defaults live in [`.env.example`](.env.example), while a device URL is
+deliberately left blank until supplied on the target Mac.
+
+For scripted provisioning, edit `.env` and run
+`./scripts/setup_macos.sh --non-interactive`. Use `--dry-run` to preview without
+saving settings or applying either installer.
 
 See [`MIGRATION.md`](MIGRATION.md) for moving an existing setup, including the
 complete list of device-resident and Mac-local data that is intentionally not

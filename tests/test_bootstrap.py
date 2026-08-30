@@ -21,9 +21,9 @@ class BootstrapTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(result.returncode, 0)
-        self.assertIn("--install-hooks", result.stdout)
-        self.assertIn("--install-service", result.stdout)
         self.assertIn("--build", result.stdout)
+        self.assertIn("setup_macos.sh", result.stdout)
+        self.assertNotIn("--install-service", result.stdout)
 
     def test_platformio_is_exactly_pinned(self):
         requirements = (ROOT / "requirements-dev.txt").read_text(encoding="utf-8")

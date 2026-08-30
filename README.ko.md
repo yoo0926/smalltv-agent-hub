@@ -52,15 +52,23 @@ Claude 주 세션의 종료가 아니라 진행 상태로 처리합니다. Claud
 ./scripts/bootstrap_macos.sh --build
 ```
 
-기본 실행은 저장소 밖의 설정을 변경하지 않습니다. 기기 주소를 확인한
-후 Conductor 알림 훅과 로그인 서비스를 설치합니다.
+빌드 단계는 Claude, Codex 또는 launchd 설정을 변경하지 않습니다. 두 번째
+단계에서 이 Mac을 대화형으로 설정합니다.
 
 ```bash
-./scripts/bootstrap_macos.sh \
-  --device-url http://smalltv-xxxx.local \
-  --install-hooks \
-  --install-service
+./scripts/setup_macos.sh
 ```
+
+setup은 Claude 훅, Codex 알림, 사용자 로그인 서비스의 설치 여부를 묻고,
+서비스를 설치할 때 SmallTV 주소를 입력받습니다. 대괄호 안의 값을 그대로
+사용하려면 Enter를 누르면 됩니다. 첫 실행의 답은 Git에서 제외되는 `.env`에
+저장되고 다음 실행부터 기본값으로 표시됩니다. 공개 가능한 초기 기본값은
+[`.env.example`](.env.example)에 있으며, 개인 기기 주소는 대상 Mac에서
+입력하기 전까지 의도적으로 비워 둡니다.
+
+자동화된 설치에서는 `.env`를 편집한 뒤
+`./scripts/setup_macos.sh --non-interactive`를 실행할 수 있습니다. 저장이나
+실제 설치 없이 확인하려면 `--dry-run`을 사용하세요.
 
 기존 설치를 다른 Mac으로 옮길 때는 [Mac 이전 가이드](MIGRATION.ko.md)를
 참고하세요. Git에 저장하지 않는 기기 내부 데이터와 Mac 로컬 데이터의
