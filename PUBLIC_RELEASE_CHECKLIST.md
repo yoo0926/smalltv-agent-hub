@@ -4,10 +4,14 @@ The GitHub repository is intentionally private during development. Complete this
 
 - [ ] Choose a license for the original Mac bridge code and add it at the repository root. MIT is the current recommendation; the firmware keeps its existing WTFPL v2 license.
 - [ ] Re-run the test suite and the `smalltv_esp32_8mb` firmware build from a clean checkout.
-- [ ] Review every tracked file for credentials, device configuration, IP addresses, personal paths, logs, and stock-firmware backups.
-- [ ] Replace local setup examples such as the current device IP with placeholders where appropriate.
+- [x] Pin Python/PlatformIO guidance, ESP32 platform, and firmware libraries so a fresh checkout does not silently follow future toolchain releases.
+- [x] Document fresh-Mac setup and distinguish Git-tracked source from device-resident and Mac-local data in `MIGRATION.md`.
+- [x] Review tracked files for credentials, device configuration, personal paths, logs, and stock-firmware backups. Root CI also runs `scripts/check_repository_hygiene.py` to prevent common regressions.
+- [x] Replace machine-specific setup values with placeholders in root project documentation.
 - [ ] Decide whether the firmware updater should target this repository. While the repository is private, an unauthenticated device cannot download private GitHub releases.
-- [ ] Adapt and move the firmware CI workflows to the repository root only when automatic public builds and documentation deployment are wanted. Workflows nested below `firmware/` do not run in this repository.
+- [x] Add a least-privilege root CI workflow for Python 3.9/3.14 tests, source hygiene, generated-web-UI verification, and the pinned SmallTV Pro firmware build. It uploads checksummed OTA/factory artifacts without publishing a release.
 - [ ] Update fork branding and documentation links while keeping the upstream attribution in `THIRD_PARTY_NOTICES.md`.
-- [ ] Build release assets from source; never publish the stock firmware backup.
-- [ ] Review GitHub repository settings, Actions permissions, issue templates, and the security contact before making the repository public.
+- [x] Build CI artifacts exclusively from source; never publish the stock firmware backup.
+- [x] Add privacy-aware issue forms, a pull request template, contribution guidance, and weekly dependency update checks.
+- [ ] Choose a private security-reporting contact or enable GitHub private vulnerability reporting, then add `SECURITY.md`.
+- [ ] Review GitHub repository settings and Actions permissions before making the repository public.

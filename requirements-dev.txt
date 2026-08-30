@@ -1,0 +1,3 @@
+# Reproducible local/CI firmware tool. The Python bridge itself has no external
+# runtime dependencies and supports Python 3.9+.
+platformio==6.1.19

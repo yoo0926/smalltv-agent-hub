@@ -1,0 +1,61 @@
+name: Bug report
+description: Report reproducible bridge, firmware, touch, or web UI behavior.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Do not include Wi-Fi credentials, web passwords, tokens, prompts, responses, session IDs, private project names, or unredacted runtime files.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - macOS bridge or Conductor hooks
+        - Agent Hub display
+        - Touch or app menu
+        - Web dashboard
+        - Ticker or weather
+        - Firmware build or update
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Include macOS/Python or firmware version as relevant.
+      placeholder: "macOS 15.x, Python 3.14.x, firmware v0.x.x"
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Describe the expected and actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics
+      description: Paste only the smallest relevant, sanitized log or status excerpt.
+      render: text
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed credentials, prompts/responses, session IDs, device identifiers, and private project details.
+          required: true

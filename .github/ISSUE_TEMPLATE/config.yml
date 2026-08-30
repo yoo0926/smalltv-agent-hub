@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Setup and migration guide
+    url: https://github.com/yoo0926/smalltv-agent-hub/blob/main/MIGRATION.md
+    about: Check the fresh-Mac and local-data guide before reporting setup problems.

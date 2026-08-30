@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository-hygiene:
+    name: Repository hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Reject local data and machine-specific values
+        run: python3 scripts/check_repository_hygiene.py
+
+  bridge-tests:
+    name: Bridge tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.9', '3.14']
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Run tests
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -v
+
+  firmware:
+    name: SmallTV Pro firmware
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PLATFORMIO_CORE_DIR: ${{ github.workspace }}/firmware/smalltv-agent-hub/.pio-core
+      PLATFORMIO_SETTING_ENABLE_TELEMETRY: 'no'
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.14'
+
+      - name: Restore PlatformIO cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            firmware/smalltv-agent-hub/.pio-core
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('requirements-dev.txt', 'firmware/smalltv-agent-hub/platformio.ini') }}
+          restore-keys: |
+            pio-${{ runner.os }}-
+
+      - name: Install pinned PlatformIO
+        run: |
+          python -m pip install --disable-pip-version-check --upgrade 'pip==26.2.1'
+          python -m pip install --disable-pip-version-check --requirement requirements-dev.txt
+
+      - name: Verify generated web UI
+        working-directory: firmware/smalltv-agent-hub
+        run: |
+          python tools/gzip_webui.py
+          git diff --exit-code -- src/webui.h
+
+      - name: Build SmallTV Pro
+        working-directory: firmware/smalltv-agent-hub
+        run: pio run -e smalltv_esp32_8mb
+
+      - name: Stage firmware artifacts
+        run: |
+          mkdir -p dist
+          cp firmware/smalltv-agent-hub/.pio/build/smalltv_esp32_8mb/firmware.bin dist/smalltv-agent-hub-esp32-pro-ota.bin
+          cp firmware/smalltv-agent-hub/.pio/build/smalltv_esp32_8mb/firmware.factory.bin dist/smalltv-agent-hub-esp32-pro-factory.bin
+          cd dist
+          sha256sum *.bin > SHA256SUMS
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: smalltv-agent-hub-esp32-pro-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14

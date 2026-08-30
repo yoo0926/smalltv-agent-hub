@@ -36,26 +36,57 @@ def load_json(path: Path) -> Dict[str, Any]:
     return data
 
 
-def add_claude_hooks(settings: Dict[str, Any], command: str) -> int:
+def _is_desk_hub_claude(command: Any) -> bool:
+    return (
+        isinstance(command, str)
+        and "desk-hub-event" in command
+        and command.rstrip().endswith(" claude")
+    )
+
+
+def merge_claude_hooks(settings: Dict[str, Any], command: str) -> Tuple[int, int]:
     hooks = settings.setdefault("hooks", {})
     if not isinstance(hooks, dict):
         raise ValueError("Claude settings 'hooks' must be an object")
     added = 0
+    updated = 0
     for event in CLAUDE_EVENTS:
         groups = hooks.setdefault(event, [])
         if not isinstance(groups, list):
             raise ValueError(f"Claude hook '{event}' must be an array")
-        exists = any(
-            isinstance(group, dict)
-            and any(
-                isinstance(hook, dict) and hook.get("command") == command
-                for hook in group.get("hooks", [])
-            )
-            for group in groups
-        )
+        exists = False
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            group_hooks = group.get("hooks", [])
+            if not isinstance(group_hooks, list):
+                continue
+            for hook in group_hooks:
+                if not isinstance(hook, dict):
+                    continue
+                existing = hook.get("command")
+                if existing == command:
+                    exists = True
+                    break
+                # A clone moved to another directory. Update the old absolute
+                # desk-hub path in place instead of leaving a broken hook and
+                # appending a second invocation.
+                if _is_desk_hub_claude(existing):
+                    hook["command"] = command
+                    updated += 1
+                    exists = True
+                    break
+            if exists:
+                break
         if not exists:
             groups.append({"matcher": "", "hooks": [{"type": "command", "command": command}]})
             added += 1
+    return added, updated
+
+
+def add_claude_hooks(settings: Dict[str, Any], command: str) -> int:
+    """Backward-compatible helper used by callers that only need add count."""
+    added, _ = merge_claude_hooks(settings, command)
     return added
 
 
@@ -79,6 +110,49 @@ def replace_notify(config: str, argv: List[str]) -> str:
     if match:
         return config[: match.start()] + line + config[match.end() :]
     return line + "\n" + config
+
+
+def rewrite_desk_hub_notify(
+    argv: List[str], hook: str, forward_path: str
+) -> Tuple[List[str], bool]:
+    """Refresh desk-hub paths inside a possibly nested notify chain.
+
+    Codex integrations can wrap the previous notifier as a JSON-encoded argv
+    string (for example a ``--previous-notify`` argument). Walk those lists so
+    moving the clone does not append a duplicate or leave an absolute old path.
+    """
+    out = list(argv)
+    direct = False
+    found = False
+
+    for index, item in enumerate(out):
+        if isinstance(item, str) and item.rstrip("/").endswith("/bin/desk-hub-event"):
+            out[index] = hook
+            direct = found = True
+
+    for index, item in enumerate(out):
+        if not isinstance(item, str) or not item.lstrip().startswith("["):
+            continue
+        try:
+            nested = json.loads(item)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(nested, list) or not all(isinstance(value, str) for value in nested):
+            continue
+        rewritten, nested_found = rewrite_desk_hub_notify(nested, hook, forward_path)
+        if nested_found:
+            if rewritten != nested:
+                out[index] = json.dumps(
+                    rewritten, ensure_ascii=False, separators=(",", ":")
+                )
+            found = True
+
+    if direct:
+        for index, item in enumerate(out[:-1]):
+            if item == "--forward-config":
+                out[index + 1] = forward_path
+
+    return out, found
 
 
 def backup(path: Path) -> Optional[Path]:
@@ -115,8 +189,12 @@ def main() -> int:
     claude_settings: Dict[str, Any] = {}
     if not args.skip_claude:
         claude_settings = load_json(claude_path)
-        added = add_claude_hooks(claude_settings, f"{shlex.quote(str(hook))} claude")
-        actions.append(f"Claude: add {added} hooks in {claude_path}")
+        added, updated = merge_claude_hooks(
+            claude_settings, f"{shlex.quote(str(hook))} claude"
+        )
+        actions.append(
+            f"Claude: add {added}, update {updated} hooks in {claude_path}"
+        )
 
     codex_path = args.home / ".codex" / "config.toml"
     codex_config = ""
@@ -126,11 +204,21 @@ def main() -> int:
         codex_config = codex_path.read_text(encoding="utf-8") if codex_path.exists() else ""
         existing, _ = parse_notify(codex_config)
         new_notify = [str(hook), "codex", "--forward-config", str(forward_path)]
-        if existing and existing != new_notify and str(hook) not in existing:
-            forward_argv = existing
-            actions.append("Codex: preserve and forward the existing notify command")
-        new_codex_config = replace_notify(codex_config, new_notify)
-        actions.append(f"Codex: set chained notify in {codex_path}")
+        rewritten, contains_hub = rewrite_desk_hub_notify(
+            existing or [], str(hook), str(forward_path)
+        )
+        if contains_hub:
+            new_codex_config = replace_notify(codex_config, rewritten)
+            if rewritten == existing:
+                actions.append("Codex: desk-hub is already present in the notify chain")
+            else:
+                actions.append("Codex: update moved desk-hub paths in the notify chain")
+        else:
+            if existing and existing != new_notify:
+                forward_argv = existing
+                actions.append("Codex: preserve and forward the existing notify command")
+            new_codex_config = replace_notify(codex_config, new_notify)
+            actions.append(f"Codex: set chained notify in {codex_path}")
 
     print("\n".join(actions))
     if not args.apply:

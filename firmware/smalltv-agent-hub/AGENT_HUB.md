@@ -72,8 +72,20 @@ disables the save button to prevent duplicate submissions.
 
 ## Build and install
 
+From the repository root on macOS, the recommended clean setup and build is:
+
 ```bash
-PLATFORMIO_CORE_DIR=.pio-core .venv/bin/pio run -e smalltv_esp32_8mb
+./scripts/bootstrap_macos.sh --build
+```
+
+The project currently pins PlatformIO 6.1.19, pioarduino's ESP32 platform
+55.03.311 (Arduino ESP32 3.3.11 / ESP-IDF 5.5.5), and exact application library
+versions in `platformio.ini`. To rebuild with an existing local environment:
+
+```bash
+cd firmware/smalltv-agent-hub
+PLATFORMIO_CORE_DIR=.pio-core PLATFORMIO_SETTING_ENABLE_TELEMETRY=no \
+  .venv/bin/pio run -e smalltv_esp32_8mb
 ```
 
 Upload `.pio/build/smalltv_esp32_8mb/firmware.bin` through the stock `/update`

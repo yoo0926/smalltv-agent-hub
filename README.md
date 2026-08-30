@@ -24,6 +24,30 @@ Local-only status bridge for Conductor sessions running Claude Code and Codex. T
 
 Prompts and assistant responses are not persisted in the state file or offline queue. The display API emits short lifecycle messages such as `Working`, `Permission required`, and `Turn complete`.
 
+## Fresh Mac setup
+
+Python 3.14.7 is the recommended development version; the bridge remains tested
+on Python 3.9+. From a new clone, create the local toolchain, run all tests, and
+build the SmallTV Pro firmware with:
+
+```bash
+./scripts/bootstrap_macos.sh --build
+```
+
+Nothing outside the repository is changed by default. After confirming the
+device URL, install the Conductor notification hooks and login service:
+
+```bash
+./scripts/bootstrap_macos.sh \
+  --device-url http://smalltv-xxxx.local \
+  --install-hooks \
+  --install-service
+```
+
+See [`MIGRATION.md`](MIGRATION.md) for moving an existing setup, including the
+complete list of device-resident and Mac-local data that is intentionally not
+stored in Git.
+
 ## Run the bridge
 
 ```bash
@@ -74,6 +98,7 @@ python3 scripts/install_hooks.py --apply
 The installer:
 
 - merges desk-hub entries into `~/.claude/settings.json` without removing other hooks;
+- updates old absolute desk-hub hook paths when the clone has moved;
 - backs up existing Claude and Codex configuration files;
 - changes the user-level Codex `notify` command, because project-level Codex config is not allowed to set `notify`;
 - records the previous Codex notify command and forwards the original JSON to it.
@@ -118,8 +143,12 @@ If a Conductor-managed Claude/Codex binary uses an isolated home instead of `~/.
 - `src/`, `bin/`, and `scripts/`: the macOS bridge, event hook, and installers
 - `tests/`: privacy, lifecycle, hook-installation, and launch-agent tests
 - `firmware/smalltv-agent-hub/`: the SmallTV Pro firmware fork and agent display mode
+- `.github/workflows/ci.yml`: root CI for Python tests, repository hygiene, and reproducible SmallTV Pro build artifacts
 
 Local runtime state, device configuration, stock-firmware backups, downloaded reference repositories, build toolchains, and compiled firmware images are intentionally excluded from version control.
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a change. Its privacy
+rules apply equally to issue logs, screenshots, and test fixtures.
 
 ## Licensing and upstream attribution
 
