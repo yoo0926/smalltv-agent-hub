@@ -3,7 +3,7 @@
 The GitHub repository is intentionally private during development. Complete this checklist before changing its visibility.
 
 - [ ] Choose a license for the original Mac bridge code and add it at the repository root. MIT is the current recommendation; the firmware keeps its existing WTFPL v2 license.
-- [ ] Re-run the test suite and the `smalltv_esp32_8mb` firmware build from a clean checkout.
+- [x] Re-run the test suite and the `smalltv_esp32_8mb` firmware build from a clean checkout. [CI run #1](https://github.com/yoo0926/smalltv-agent-hub/actions/runs/33314191659) passed for commit `79a9698` and produced checksummed OTA/factory artifacts.
 - [x] Pin Python/PlatformIO guidance, ESP32 platform, and firmware libraries so a fresh checkout does not silently follow future toolchain releases.
 - [x] Document fresh-Mac setup and distinguish Git-tracked source from device-resident and Mac-local data in `MIGRATION.md`.
 - [x] Review tracked files for credentials, device configuration, personal paths, logs, and stock-firmware backups. Root CI also runs `scripts/check_repository_hygiene.py` to prevent common regressions.
