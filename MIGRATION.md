@@ -1,5 +1,7 @@
 # Moving the desk hub to another Mac
 
+[English](MIGRATION.md) | [한국어](MIGRATION.ko.md)
+
 The Git repository contains everything needed to rebuild the bridge and the
 SmallTV Pro firmware. Runtime state, device settings, credentials, downloaded
 references, and build products are deliberately local-only.

@@ -57,6 +57,15 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertNotIn("REPLACE WITH", security)
         self.assertFalse((ROOT / "SECURITY.md.template").exists())
 
+    def test_korean_onboarding_guides_are_linked(self):
+        pairs = (("README.md", "README.ko.md"), ("MIGRATION.md", "MIGRATION.ko.md"))
+        for english_name, korean_name in pairs:
+            english = (ROOT / english_name).read_text(encoding="utf-8")
+            korean = (ROOT / korean_name).read_text(encoding="utf-8")
+            self.assertIn(f"[한국어]({korean_name})", english)
+            self.assertIn(f"[English]({english_name})", korean)
+            self.assertIn("./scripts/bootstrap_macos.sh --build", korean)
+
 
 if __name__ == "__main__":
     unittest.main()

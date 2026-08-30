@@ -15,6 +15,8 @@ All notable user-visible changes are recorded here. The project follows
   both clean clones and consistent in-progress source changes.
 - Added the root MIT license and a security policy using GitHub private
   vulnerability reporting for coordinated disclosure.
+- Added separate Korean translations for the main guide and Mac migration guide,
+  with language links that keep the English documents as the source of truth.
 
 ## 0.2.1 - 2026-08-30
 
