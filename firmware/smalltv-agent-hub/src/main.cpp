@@ -1,10 +1,9 @@
-// smalltv-mod — custom firmware for the GeekMagic SmallTV (ESP-12F / ESP8266)
+// SmallTV Agent Hub — custom firmware for GeekMagic SmallTV hardware
 //
-// Three features, each a self-contained DisplayMode (see Mode.h), picked in the
-// web UI and dispatched from the registry below:
-//   - Ticker (features/ticker):  stock/crypto price, % change, sparkline.
-//   - Usage  (features/usage):   Claude 5h/7d usage bars + animated mascot.
-//   - Radar  (features/radar):   live ADS-B plane radar (compiled in when WITH_RADAR).
+// Features are self-contained DisplayModes (see Mode.h), picked in the web UI
+// and dispatched from the registry below. The SmallTV Pro distribution starts
+// with Agent Hub, then Ticker, Usage, Weather, and Home Assistant; optional
+// targets may compile a different subset.
 // Shared plumbing (WiFi, web UI, OTA, display core, settings) lives at src root.
 //
 // License: WTFPL

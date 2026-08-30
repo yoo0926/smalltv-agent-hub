@@ -1,7 +1,7 @@
 blueprint:
   name: SmallTV screen board
   description: >-
-    Publishes up to four sensor screens to a SmallTV running smalltv-mod,
+    Publishes up to four sensor screens to a SmallTV running SmallTV Agent Hub,
     one retained MQTT message per slot, and the device rotates through them
     in the carousel. Each screen shows an optional icon on top, a title,
     and a big value line that defaults to the entity's state with its
@@ -16,7 +16,7 @@ blueprint:
     carry a time-to-live, so deleting this automation makes them expire
     on their own instead of staying on the broker forever.
   domain: automation
-  source_url: https://github.com/giovi321/smalltv-mod/blob/main/blueprints/automation/smalltv/screen_board.yaml
+  source_url: https://github.com/yoo0926/smalltv-agent-hub/blob/main/firmware/smalltv-agent-hub/blueprints/automation/smalltv/screen_board.yaml
   homeassistant:
     min_version: 2024.6.0
   input:

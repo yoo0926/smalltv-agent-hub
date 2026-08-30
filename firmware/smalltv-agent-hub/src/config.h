@@ -1,4 +1,4 @@
-// config.h — compile-time constants for smalltv-mod
+// config.h — compile-time constants for SmallTV Agent Hub
 //
 // Hardware: three board variants, all a 1.54" 240x240 ST7789 IPS panel:
 //   - Original GeekMagic SmallTV: ESP-12F (ESP8266)      [board_esp8266.h]
@@ -15,28 +15,30 @@
 #define FW_VERSION  "0.2.1"
 #define SELF_UPDATE_ENABLED 0   // custom builds update only via an explicitly uploaded .bin
 
-// Project / update references (shown in the web UI; used by the GitHub self-update)
-#define REPO_URL      "https://github.com/giovi321/smalltv-mod"
-#define REPO_OWNER    "giovi321"
-#define REPO_NAME     "smalltv-mod"
+// Project / update references shown in the web UI. Self-update is intentionally
+// disabled, but keeping these names current avoids linking a custom build back
+// to the upstream release feed and makes a future deliberate opt-in unambiguous.
+#define REPO_URL      "https://github.com/yoo0926/smalltv-agent-hub"
+#define REPO_OWNER    "yoo0926"
+#define REPO_NAME     "smalltv-agent-hub"
 // Release asset the GitHub self-updater pulls, and the short variant name shown
 // in the web UI. One app image per target; the ESP8266 has two, standard and
 // lean, so a device keeps its own variant across a self-update instead of
 // silently gaining or losing features.
 #if defined(SMALLTV_ESP32C2)
-  #define UPDATE_ASSET "smalltv-mod-firmware-c2.bin"
+  #define UPDATE_ASSET "smalltv-agent-hub-esp32-c2-ota.bin"
   #define FW_VARIANT   "c2"
 #elif defined(SMALLTV_ESP32_PRO)
-  #define UPDATE_ASSET "smalltv-mod-firmware-esp32-pro.bin"
+  #define UPDATE_ASSET "smalltv-agent-hub-esp32-pro-ota.bin"
   #define FW_VARIANT   "esp32-pro"
 #elif defined(SMALLTV_ESP32)
-  #define UPDATE_ASSET "smalltv-mod-firmware-esp32.bin"
+  #define UPDATE_ASSET "smalltv-agent-hub-esp32-ota.bin"
   #define FW_VARIANT   "esp32"
 #elif defined(SMALLTV_LEAN)
-  #define UPDATE_ASSET "smalltv-mod-firmware-lean.bin"
+  #define UPDATE_ASSET "smalltv-agent-hub-esp8266-lean-ota.bin"
   #define FW_VARIANT   "esp8266-lean"
 #else
-  #define UPDATE_ASSET "smalltv-mod-firmware.bin"
+  #define UPDATE_ASSET "smalltv-agent-hub-esp8266-ota.bin"
   #define FW_VARIANT   "esp8266"
 #endif
 #define GH_API_HOST   "api.github.com"

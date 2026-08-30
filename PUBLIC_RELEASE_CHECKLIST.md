@@ -1,17 +1,43 @@
 # Public release checklist
 
-The GitHub repository is intentionally private during development. Complete this checklist before changing its visibility.
+Technical preparation is complete. The repository remains private until the
+owner completes the three decisions at the end of this file.
 
-- [ ] Choose a license for the original Mac bridge code and add it at the repository root. MIT is the current recommendation; the firmware keeps its existing WTFPL v2 license.
-- [x] Re-run the test suite and the `smalltv_esp32_8mb` firmware build from a clean checkout. [CI run #1](https://github.com/yoo0926/smalltv-agent-hub/actions/runs/33314191659) passed for commit `79a9698` and produced checksummed OTA/factory artifacts.
-- [x] Pin Python/PlatformIO guidance, ESP32 platform, and firmware libraries so a fresh checkout does not silently follow future toolchain releases.
-- [x] Document fresh-Mac setup and distinguish Git-tracked source from device-resident and Mac-local data in `MIGRATION.md`.
-- [x] Review tracked files for credentials, device configuration, personal paths, logs, and stock-firmware backups. Root CI also runs `scripts/check_repository_hygiene.py` to prevent common regressions.
-- [x] Replace machine-specific setup values with placeholders in root project documentation.
-- [ ] Decide whether the firmware updater should target this repository. While the repository is private, an unauthenticated device cannot download private GitHub releases.
-- [x] Add a least-privilege root CI workflow for Python 3.9/3.14 tests, source hygiene, generated-web-UI verification, and the pinned SmallTV Pro firmware build. It uploads checksummed OTA/factory artifacts without publishing a release.
-- [ ] Update fork branding and documentation links while keeping the upstream attribution in `THIRD_PARTY_NOTICES.md`.
-- [x] Build CI artifacts exclusively from source; never publish the stock firmware backup.
-- [x] Add privacy-aware issue forms, a pull request template, contribution guidance, and weekly dependency update checks.
-- [ ] Choose a private security-reporting contact or enable GitHub private vulnerability reporting, then add `SECURITY.md`.
-- [ ] Review GitHub repository settings and Actions permissions before making the repository public.
+## Completed technical work
+
+- [x] Pin Python/PlatformIO guidance, the ESP32 platform, and firmware libraries.
+- [x] Provide a safe fresh-Mac bootstrap and path-aware Claude/Codex hook installer.
+- [x] Document Git-tracked, Mac-local, and device-resident data in `MIGRATION.md`.
+- [x] Scan tracked files for credentials, personal paths, logs, stock firmware,
+  build output, and local runtime data; enforce common cases in root CI.
+- [x] Replace machine-specific values with placeholders in project documentation.
+- [x] Run Python 3.9/3.14 tests and `smalltv_esp32_8mb` from a clean checkout.
+  [CI run #1](https://github.com/yoo0926/smalltv-agent-hub/actions/runs/33314191659)
+  passed and produced checksummed OTA/factory artifacts.
+- [x] Add least-privilege root CI with pinned actions, timeouts, generated-web-UI
+  verification, and source-built firmware artifacts.
+- [x] Keep firmware updates manual-only. The device does not query an upstream
+  or private GitHub release feed, and the web UI names the exact OTA artifact.
+- [x] Replace inherited project branding and links while preserving explicit
+  upstream attribution in `THIRD_PARTY_NOTICES.md` and the firmware README.
+- [x] Remove the inherited documentation site and nested workflows whose board,
+  feature, release, and updater claims did not match this Pro distribution.
+- [x] Add `CHANGELOG.md`, `RELEASING.md`, CODEOWNERS, contribution guidance,
+  privacy-aware issue/PR forms, and weekly dependency checks.
+- [x] Review current GitHub repository and Actions settings; record the result
+  and future multi-contributor branch-rule recommendation in
+  `REPOSITORY_SETTINGS.md`.
+- [x] Ensure release instructions publish only clean source-built Agent Hub
+  artifacts and never stock firmware or device settings.
+
+## Owner decisions still required
+
+- [ ] Choose a license for the original Mac bridge and add it as root `LICENSE`.
+  MIT is the current recommendation. The firmware subtree retains upstream
+  WTFPL v2 under `firmware/smalltv-agent-hub/LICENSE`.
+- [ ] Choose a private security-reporting route: enable GitHub private
+  vulnerability reporting after publication, or provide a dedicated security
+  contact. Replace the placeholder in `SECURITY.md.template` and rename it to
+  `SECURITY.md`.
+- [ ] Change repository visibility from private to public only after the two
+  files above are complete. This must be an explicit owner action.

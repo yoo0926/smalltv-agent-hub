@@ -1,8 +1,10 @@
 # GeekMagic Conductor Desk Hub
 
+[![CI](https://github.com/yoo0926/smalltv-agent-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/yoo0926/smalltv-agent-hub/actions/workflows/ci.yml)
+
 Local-only status bridge for Conductor sessions running Claude Code and Codex. The bridge keeps service credentials on the Mac and pushes a privacy-minimized task snapshot to the custom SmallTV Pro firmware over Wi-Fi.
 
-## What works in this first slice
+## Current capabilities
 
 - Claude Code: `working`, `needs_input`, `done`, `failed`, and `idle`
 - Codex: `done` for the officially supported external `agent-turn-complete` notification
@@ -150,8 +152,17 @@ Local runtime state, device configuration, stock-firmware backups, downloaded re
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a change. Its privacy
 rules apply equally to issue logs, screenshots, and test fixtures.
 
+Release changes are tracked in [`CHANGELOG.md`](CHANGELOG.md), and the
+source-only release process is documented in [`RELEASING.md`](RELEASING.md).
+The current GitHub configuration review is recorded in
+[`REPOSITORY_SETTINGS.md`](REPOSITORY_SETTINGS.md).
+
 ## Licensing and upstream attribution
 
 The firmware is derived from [giovi321/smalltv-mod](https://github.com/giovi321/smalltv-mod) and retains its WTFPL v2 license in [`firmware/smalltv-agent-hub/LICENSE`](firmware/smalltv-agent-hub/LICENSE). See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the imported revision and attribution.
 
-This repository is private for now. The Mac bridge does not yet have a public license; choose and add one before changing the repository visibility. The remaining publication steps are tracked in [`PUBLIC_RELEASE_CHECKLIST.md`](PUBLIC_RELEASE_CHECKLIST.md).
+This repository is private for now. The Mac bridge does not yet have a public
+license; choose and add one before changing the repository visibility. A
+prepared [`SECURITY.md.template`](SECURITY.md.template) also needs the owner's
+private reporting route. Those remaining owner decisions are tracked in
+[`PUBLIC_RELEASE_CHECKLIST.md`](PUBLIC_RELEASE_CHECKLIST.md).

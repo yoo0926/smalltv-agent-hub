@@ -1,11 +1,11 @@
 // loader.cpp — a minimal OTA "trampoline" for devices whose stock firmware
-// reserves so much flash that its updater rejects a full smalltv-mod image
+// reserves so much flash that its updater rejects a full Agent Hub image
 // ("Not Enough Space"), e.g. the GeekMagic SmallTV-ultra with its large
 // image/GIF store.
 //
 // It is deliberately tiny: WiFi + a bare web OTA endpoint, no display, no
 // features. Small enough to fit the stock firmware's slot, it is flashed over
-// the stock OTA. Once running it uses smalltv-mod's normal 4m1m flash layout,
+// the stock OTA. Once running it uses the project's normal 4m1m flash layout,
 // whose sketch region is large, so ITS /update then accepts the full firmware
 // the stock updater refused. Two hops, no UART needed.
 //
@@ -29,7 +29,7 @@ static ESP8266HTTPUpdateServer updater;
 
 void setup() {
   Serial.begin(115200);
-  Serial.println(F("\nsmalltv-mod loader"));
+  Serial.println(F("\nSmallTV Agent Hub loader"));
   WiFi.persistent(false);
 
   const char* ssid = LOADER_SSID;

@@ -98,10 +98,13 @@ PIO="$VENV_DIR/bin/pio"
 "$VENV_PYTHON" -m pip install --disable-pip-version-check --upgrade "pip==26.2.1"
 "$VENV_PYTHON" -m pip install --disable-pip-version-check --requirement "$PROJECT_DIR/requirements-dev.txt"
 
+WEBUI_HEADER="$FIRMWARE_DIR/src/webui.h"
+WEBUI_HEADER_BEFORE=$(cksum "$WEBUI_HEADER")
 "$VENV_PYTHON" "$FIRMWARE_DIR/tools/gzip_webui.py"
-if ! git -C "$PROJECT_DIR" diff --quiet -- firmware/smalltv-agent-hub/src/webui.h; then
-  echo "Generated webui.h differs from the committed file." >&2
-  echo "Review and commit the regenerated file before continuing." >&2
+WEBUI_HEADER_AFTER=$(cksum "$WEBUI_HEADER")
+if [ "$WEBUI_HEADER_BEFORE" != "$WEBUI_HEADER_AFTER" ]; then
+  echo "Generated webui.h was out of date." >&2
+  echo "Review the regenerated file, then rerun this command." >&2
   exit 1
 fi
 

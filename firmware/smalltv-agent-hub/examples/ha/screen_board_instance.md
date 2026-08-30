@@ -8,7 +8,7 @@
 #
 # Import the blueprint first: Settings -> Automations & scenes -> Blueprints
 # -> Import blueprint, then paste
-# https://github.com/giovi321/smalltv-mod/blob/main/blueprints/automation/smalltv/screen_board.yaml
+# https://github.com/yoo0926/smalltv-agent-hub/blob/main/firmware/smalltv-agent-hub/blueprints/automation/smalltv/screen_board.yaml
 # or drop the file into config/blueprints/automation/smalltv/ yourself.
 # Replace the entity ids and the hostname. Slot names sort lexicographically
 # and must be unique per device across every automation publishing to the

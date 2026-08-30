@@ -40,6 +40,12 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("releases/download/55.03.311/", config)
         self.assertNotIn("releases/download/stable/", config)
 
+    def test_generated_ui_check_allows_a_consistent_working_tree(self):
+        script = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('WEBUI_HEADER_BEFORE=$(cksum "$WEBUI_HEADER")', script)
+        self.assertIn('WEBUI_HEADER_AFTER=$(cksum "$WEBUI_HEADER")', script)
+        self.assertNotIn("git -C \"$PROJECT_DIR\" diff --quiet", script)
+
 
 if __name__ == "__main__":
     unittest.main()

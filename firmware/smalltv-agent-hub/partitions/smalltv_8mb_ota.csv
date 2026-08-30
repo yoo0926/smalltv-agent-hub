@@ -1,4 +1,4 @@
-# smalltv-mod classic ESP32 8 MB flash layout.
+# SmallTV Agent Hub classic ESP32 8 MB flash layout.
 # Matches the stock SmallTV Pro table (verified from a live device via
 # /space.json, see GeekTV-Pro/partitions.csv): two OTA app slots of 0x220000
 # (2.125 MB) each + 0x3B0000 (~3.7 MB) LittleFS. FS partition is subtype
