@@ -17,7 +17,8 @@ Local-only status bridge for Conductor sessions running Claude Code and Codex. T
 - Privacy-minimized offline queue with automatic replay on bridge startup
 - Dependency-free Python service running on Homebrew Python 3.14, with Python 3.9+ compatibility and persisted local state
 - Asynchronous push to `POST /api/agents`, plus full-screen `done` / `needs_input` alerts through `POST /api/notify`
-- SmallTV Pro touch controls: tap to dismiss an alert; hold to open the app menu, tap to move, and hold to select
+- SmallTV Pro touch controls: tap to dismiss an alert; hold to open the app menu, tap to move forward, two quick taps to move back, and hold to select
+- On-device Settings card at the end of that menu, showing the IP to open in a browser, the `.local` name, the joined network, and the firmware version
 - Web dashboard app shortcuts that switch the display immediately and persist the selection
 - SmallTV Pro weather screen for a configured city, powered by Open-Meteo current conditions and a four-day forecast
 - Yahoo Finance ticker support for exchange-qualified symbols such as `000660.KS`, with fetch diagnostics in the web dashboard

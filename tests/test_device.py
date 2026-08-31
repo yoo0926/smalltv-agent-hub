@@ -1,7 +1,9 @@
+import threading
 import unittest
 from datetime import datetime, timedelta
 
-from geekmagic_hub.device import alert_payload, dashboard_payload
+from geekmagic_hub import device as device_module
+from geekmagic_hub.device import DeviceNotifier, alert_payload, dashboard_payload
 
 # The dashboard hides finished work after a while, so the tests pin "now"
 # instead of racing the wall clock.
@@ -266,6 +268,48 @@ class DevicePayloadTests(unittest.TestCase):
         self.assertEqual(len(rows_after(9)), 1)
         self.assertEqual(rows_after(11), [])
 
+    def test_a_session_abandoned_mid_turn_stops_holding_a_row(self):
+        """A terminal closed mid-turn leaves a session "working" forever. It is
+        kept in the store on purpose, but it must not occupy one of the four
+        rows indefinitely, outranking work that is actually running."""
+
+        def rows_after(hours):
+            stamp = (NOW - timedelta(hours=hours)).isoformat(timespec="seconds")
+            snapshot = {
+                "agents": [
+                    {
+                        "workspace": "ghost",
+                        "workspace_path": "/ws/ghost",
+                        "agent": "claude",
+                        "state": "working",
+                        "updated_at": stamp,
+                    }
+                ]
+            }
+            return dashboard_payload(snapshot, now=NOW)["agents"]
+
+        self.assertEqual(len(rows_after(5)), 1)
+        self.assertEqual(rows_after(7), [])
+
+    def test_a_waiting_session_also_stops_holding_a_row_once_abandoned(self):
+        stamp = (NOW - timedelta(hours=7)).isoformat(timespec="seconds")
+        snapshot = {
+            "agents": [
+                {
+                    "workspace": "ghost",
+                    "workspace_path": "/ws/ghost",
+                    "agent": "claude",
+                    "state": "needs_input",
+                    "updated_at": stamp,
+                }
+            ]
+        }
+        self.assertEqual(dashboard_payload(snapshot, now=NOW)["agents"], [])
+
+    def test_a_session_with_no_timestamp_is_still_shown(self):
+        snapshot = {"agents": [{"workspace": "fresh", "agent": "claude", "state": "working"}]}
+        self.assertEqual(len(dashboard_payload(snapshot, now=NOW)["agents"]), 1)
+
     def test_no_done_alert_while_another_session_is_still_working(self):
         working = {"workspace": "shared", "workspace_path": "/ws/shared", "agent": "claude", "state": "working"}
         finished = {"workspace": "shared", "workspace_path": "/ws/shared", "agent": "codex", "state": "done"}
@@ -288,6 +332,57 @@ class DevicePayloadTests(unittest.TestCase):
         self.assertEqual(alert_payload({"workspace": "demo", "state": "needs_input"})["state"], "waiting")
         self.assertEqual(alert_payload({"workspace": "demo", "state": "failed"})["label"], "FAIL demo")
         self.assertIsNone(alert_payload({"workspace": "demo", "state": "working"}))
+
+
+class AlertDeliveryTests(unittest.TestCase):
+    """The attention overlay is the point of the device, so it must not be lost
+    to a single failed push. Alerts are drained before any I/O, so before the
+    fix a sub-second hiccup destroyed every queued one."""
+
+    WAITING = {"workspace": "stuck", "workspace_path": "/ws/stuck", "agent": "claude", "state": "needs_input"}
+    SNAPSHOT = {"agents": [WAITING]}
+
+    def _notifier(self, fail_first):
+        posted = []
+        delivered = threading.Event()
+        remaining = {"failures": fail_first}
+
+        class Flaky(DeviceNotifier):
+            def _post(self, path, payload):
+                if path == "api/agents" and remaining["failures"]:
+                    remaining["failures"] -= 1
+                    raise OSError("device busy")
+                posted.append(path)
+                if path == "api/notify":
+                    delivered.set()
+
+        return Flaky("http://127.0.0.1:9", timeout=0.05, refresh_sec=0.05), posted, delivered
+
+    def test_an_alert_outlives_a_failed_dashboard_push(self):
+        notifier, posted, delivered = self._notifier(fail_first=1)
+        try:
+            notifier.publish(self.SNAPSHOT, changed_agent=self.WAITING)
+            self.assertTrue(delivered.wait(timeout=5), "the queued alert was dropped by the failed push")
+        finally:
+            notifier.close()
+        self.assertIn("api/notify", posted)
+
+    def test_an_alert_is_not_replayed_once_it_is_too_old(self):
+        original = device_module.ALERT_RETRY_FOR
+        device_module.ALERT_RETRY_FOR = 0.0   # every alert is already expired
+        notifier, posted, delivered = self._notifier(fail_first=1)
+        try:
+            notifier.publish(self.SNAPSHOT, changed_agent=self.WAITING)
+            self.assertFalse(delivered.wait(timeout=1.0), "a stale overlay should not reach the device")
+        finally:
+            notifier.close()
+            device_module.ALERT_RETRY_FOR = original
+        self.assertNotIn("api/notify", posted)
+
+    def test_the_push_timeout_covers_the_device_worst_case(self):
+        """Measured worst-case device latency is ~4 s; a shorter timeout turns
+        device slowness into abandoned pushes and discarded alerts."""
+        self.assertGreaterEqual(DeviceNotifier("http://127.0.0.1:9").timeout, 4.0)
 
 
 if __name__ == "__main__":

@@ -830,13 +830,25 @@ function upload(){var f=$('fw').files[0];if(!f){toast('Pick a .bin first');retur
  var fd=new FormData();fd.append('firmware',f,f.name);
  var x=new XMLHttpRequest();x.open('POST','/update');
  $('upBtn').disabled=true;
+ // The device serves one client at a time, and a big image can take minutes. The
+ // status poll would spend that whole time queued behind the upload, competing
+ // with it for the same single-client server, so it stands down until we are done.
+ stopPolling();
  x.upload.onprogress=function(e){if(e.lengthComputable){var p=Math.round(e.loaded/e.total*100);$('upBar').style.width=p+'%';$('upMsg').textContent='Uploading '+p+'%'}};
- x.onload=function(){$('upBtn').disabled=false;if(x.status==200){$('upMsg').textContent='Done. Rebooting...';$('upBar').style.width='100%';setTimeout(function(){location.reload()},9000)}else{$('upMsg').textContent='Failed: '+x.responseText}};
- x.onerror=function(){$('upBtn').disabled=false;$('upMsg').textContent='Upload error'};
+ x.onload=function(){$('upBtn').disabled=false;if(x.status==200){$('upMsg').textContent='Done. Rebooting...';$('upBar').style.width='100%';setTimeout(function(){location.reload()},9000)}else{startPolling();$('upMsg').textContent='Failed: '+x.responseText}};
+ // No HTTP response came back, so the reason is not in x.responseText. The device
+ // records it before replying, so ask it once the connection is out of the way.
+ x.onerror=function(){$('upBtn').disabled=false;$('upMsg').textContent='Upload error - asking the device why...';
+  setTimeout(function(){startPolling();j('/api/status').then(function(s){
+    $('upMsg').textContent='Upload error: '+(s.updateMsg||'device gave no reason (connection dropped mid-transfer)')
+  }).catch(function(){$('upMsg').textContent='Upload error (device unreachable)'})},2000)};
  x.send(fd);
 }
 
+var statusTimer=null;
+function startPolling(){if(!statusTimer)statusTimer=setInterval(loadStatus,5000)}
+function stopPolling(){if(statusTimer){clearInterval(statusTimer);statusTimer=null}}
 loadConfig().then(loadStatus);
-setInterval(loadStatus,5000);
+startPolling();
 </script>
 </body></html>

@@ -126,11 +126,19 @@ class StateStore:
         excess = len(self._agents) - MAX_TRACKED_SESSIONS
         if excess <= 0:
             return
-        oldest_first = sorted(
-            (k for k, v in self._agents.items() if v.get("state") not in LIVE_STATES),
-            key=lambda k: str(self._agents[k].get("updated_at") or ""),
-        )
-        for key in oldest_first[:excess]:
+
+        def oldest_first(keys):
+            return sorted(keys, key=lambda k: str(self._agents[k].get("updated_at") or ""))
+
+        # Finished sessions go first, so a live one is only ever evicted when
+        # there is nothing else left to drop. That case is real: a session whose
+        # terminal was closed mid-turn never reports an end, so it stays
+        # "working" forever and both pruners skip it. Without this fallback the
+        # cap could not fire at all and the store grew without bound.
+        expendable = oldest_first(k for k, v in self._agents.items() if v.get("state") not in LIVE_STATES)
+        if len(expendable) < excess:
+            expendable += oldest_first(k for k, v in self._agents.items() if v.get("state") in LIVE_STATES)
+        for key in expendable[:excess]:
             del self._agents[key]
 
     def snapshot(self) -> Dict[str, Any]:

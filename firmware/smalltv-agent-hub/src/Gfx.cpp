@@ -193,6 +193,50 @@ void gfxStaInfo(const char* ssid, const char* ip, const char* host) {
   }
 }
 
+// Connection card behind the app menu's Settings entry. gfxStaInfo says the same
+// thing at boot, but it scrolls past in a few seconds — this is the copy you come
+// back to when you have forgotten where the web UI lives. That is why the address
+// is the one element sized to be read from across a desk, and why the three
+// sections descend in importance: browse here, from this network, running this.
+void gfxSettingsInfo(const char* ssid, int rssi, const char* ip, const char* host,
+                     const char* version) {
+  if (!gfx) return;
+  const int ruleX = 16, ruleW = TFT_WIDTH - 32;
+
+  gfx->fillScreen(C_BLACK);
+  gfxDrawCentered("SETTINGS", 6, 2, C_YELLOW);
+  gfx->drawFastHLine(ruleX, 28, ruleW, C_DGRAY);
+
+  gfxDrawCentered("OPEN IN BROWSER", 38, 1, C_GRAY);
+  const char* addr = (ip && ip[0]) ? ip : "-";
+  gfxDrawCentered(addr, 52, gfxFitSize(addr, 232, 3), C_GREEN);
+  if (host && host[0]) {
+    // The mDNS name survives a DHCP lease change, so it is worth the second line.
+    String url = String("http://") + host + ".local";
+    gfxDrawCentered(url.c_str(), 84, gfxFitSize(url.c_str(), 232, 2), C_WHITE);
+  }
+  gfx->drawFastHLine(ruleX, 104, ruleW, C_DGRAY);
+
+  gfxDrawCentered("NETWORK", 116, 1, C_GRAY);
+  const char* net = (ssid && ssid[0]) ? ssid : "-";
+  gfxDrawCentered(net, 132, gfxFitSize(net, 232, 2), C_WHITE);
+  if (rssi) {   // 0 means "not associated", not "no signal"
+    char sig[16];
+    snprintf(sig, sizeof(sig), "%d dBm", rssi);
+    gfxDrawCentered(sig, 158, 1, C_GRAY);
+  }
+  gfx->drawFastHLine(ruleX, 178, ruleW, C_DGRAY);
+
+  // Held at the smallest size on purpose: a long SSID falls back to this size
+  // too, and the version outgrowing the network it is printed under would put
+  // the least useful line second in the hierarchy.
+  gfxDrawCentered("FIRMWARE", 188, 1, C_GRAY);
+  const char* fw = (version && version[0]) ? version : "-";
+  gfxDrawCentered(fw, 202, 1, C_WHITE);
+
+  gfxDrawCentered("tap to exit - hold for menu", 224, 1, C_DGRAY);
+}
+
 void gfxMessage(const char* title, const char* msg, uint16_t titleColor) {
   if (!gfx) return;
   gfx->fillScreen(C_BLACK);

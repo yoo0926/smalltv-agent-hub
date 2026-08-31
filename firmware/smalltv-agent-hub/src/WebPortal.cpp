@@ -39,7 +39,10 @@ static Settings*        S = nullptr;
 static bool             g_reboot = false;
 static uint32_t         g_rebootAt = 0;
 static bool             g_selfUpdate = false;   // GitHub self-update requested
-static String           g_updateMsg;            // last self-update status/error
+// Last update status/error, from either the GitHub self-updater or a manual OTA
+// upload. Surfaced as "updateMsg" in /api/status, which is the only place the
+// reason survives when an upload's own connection dies before the reply.
+static String           g_updateMsg;
 
 static void scheduleReboot(uint32_t inMs) {
   g_reboot = true;
@@ -532,12 +535,28 @@ static void handleNotify() {
 #endif
 
 // ---- OTA ------------------------------------------------------------------
+// The upload callback, not handleUpdateDone(), is the authoritative record of how
+// a manual OTA went. WebServer runs the POST handler only if the multipart parse
+// returned true, and it re-checks client.connected() *after* delivering
+// UPLOAD_FILE_END — so a client that goes away during the multi-second image
+// verification takes the 200 and the reboot with it, even though the image is
+// already written and the boot partition already switched. Latching the outcome
+// below means a committed image always reboots, and a failure always leaves a
+// reason behind in /api/status instead of dying with the connection.
+static bool g_otaBegun = false;   // Update.begin() succeeded for the upload in flight
+static bool g_otaDone  = false;   // image committed and a reboot is already scheduled
+
 static void handleUpdateDone() {
   if (!requireAuth()) return;
-  bool ok = !Update.hasError();
   server.sendHeader("Connection", "close");
-  server.send(ok ? 200 : 500, "text/plain", ok ? "OK" : platformUpdateError().c_str());
-  if (ok) scheduleReboot(1200);
+  if (g_otaDone) {
+    server.send(200, "text/plain", "OK");   // reboot already armed by the upload callback
+    return;
+  }
+  // Covers a failed image and a POST that carried no file at all; the old code
+  // read !Update.hasError() as success and rebooted on an empty upload.
+  server.send(500, "text/plain",
+              g_updateMsg.length() ? g_updateMsg.c_str() : "no firmware received");
 }
 
 // The upload callback runs while the body streams in, ahead of
@@ -545,6 +564,14 @@ static void handleUpdateDone() {
 // the final handler would let an unauthenticated POST write a whole image to
 // flash and merely lose the 200 at the end.
 static void handleUpdateUpload() {
+  // A POST that is not multipart never reaches the form parser: the core routes
+  // it down its raw path, which calls this same callback with _currentUpload
+  // still null. server.upload() would then bind a reference to *nullptr and the
+  // first field read panics the chip — reachable unauthenticated by any peer on
+  // the network with a bodyless `curl -X POST /update`. So this guard has to come
+  // before server.upload(), not after.
+  if (!server.header("Content-Type").startsWith("multipart/")) return;
+
   HTTPUpload& up = server.upload();
   if (S->auth.enabled && S->auth.pass.length() &&
       !server.authenticate(S->auth.user.c_str(), S->auth.pass.c_str())) {
@@ -552,17 +579,48 @@ static void handleUpdateUpload() {
     return;
   }
   if (up.status == UPLOAD_FILE_START) {
+    g_otaBegun = false;
+    g_otaDone  = false;
+    g_updateMsg = "";
 #if defined(SMALLTV_ESP8266)
     WiFiUDP::stopAll();   // free UDP sockets so the OTA has max contiguous flash/heap
 #endif
-    uint32_t maxSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
-    if (!Update.begin(maxSpace)) Update.printError(Serial);
+    // Raise the per-byte stall budget for this connection only (see the constant).
+    server.client().setTimeout(OTA_UPLOAD_TIMEOUT_MS);
+    const uint32_t freeSpace = ESP.getFreeSketchSpace();
+    const uint32_t maxSpace = freeSpace > 0x1000 ? ((freeSpace - 0x1000) & 0xFFFFF000) : 0;
+    g_otaBegun = maxSpace && Update.begin(maxSpace);
+    if (!g_otaBegun) {
+      Update.printError(Serial);
+      g_updateMsg = "begin failed: " + platformUpdateError();
+    }
   } else if (up.status == UPLOAD_FILE_WRITE) {
-    if (Update.write(up.buf, up.currentSize) != up.currentSize) Update.printError(Serial);
+    // Latched, so a rejected image is dropped on the floor instead of writing —
+    // and printing — an error for each of ~1100 chunks.
+    if (!g_otaBegun) return;
+    if (Update.write(up.buf, up.currentSize) != up.currentSize) {
+      Update.printError(Serial);
+      g_updateMsg = "write failed: " + platformUpdateError();
+      g_otaBegun = false;
+      Update.end();   // partial image: end() without evenIfRemaining aborts it
+    }
   } else if (up.status == UPLOAD_FILE_END) {
-    if (!Update.end(true)) Update.printError(Serial);
+    if (!g_otaBegun) return;
+    if (Update.end(true)) {
+      g_otaDone = true;
+      g_updateMsg = "installed, rebooting";
+      // Reboot from here rather than only from handleUpdateDone(): the boot
+      // partition is switched at this point, so the device has to come up on the
+      // new image even when the client is gone and the 200 is never written.
+      scheduleReboot(1200);
+    } else {
+      Update.printError(Serial);
+      g_updateMsg = "install failed: " + platformUpdateError();
+    }
   } else if (up.status == UPLOAD_FILE_ABORTED) {
     Update.end();
+    g_otaBegun = false;
+    g_updateMsg = "upload aborted after " + String(up.totalSize) + " bytes";
   }
   yield();
 }
@@ -617,6 +675,12 @@ void webPortalBegin(Settings& settings) {
   server.on("/hotspot-detect.html", handleNotFound);
   server.on("/connecttest.txt", handleNotFound);
   server.onNotFound(handleNotFound);
+
+  // Headers are dropped unless asked for by name. handleUpdateUpload needs this
+  // one to tell a real multipart upload from the raw-POST path that would hand
+  // it a null HTTPUpload.
+  static const char* kWantedHeaders[] = { "Content-Type" };
+  server.collectHeaders(kWantedHeaders, 1);
 
   server.begin();
 }

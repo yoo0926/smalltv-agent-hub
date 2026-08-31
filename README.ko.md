@@ -27,7 +27,9 @@ Claude Code와 Codex를 실행하는 Conductor 세션을 위한 로컬 전용 �
 - `POST /api/agents` 비동기 전송과 `POST /api/notify`를 통한 전체 화면
   `done` / `needs_input` 알림
 - SmallTV Pro 터치 조작: 탭으로 알림 닫기, 길게 눌러 앱 메뉴 열기,
-  탭으로 이동하고 다시 길게 눌러 선택
+  탭으로 다음 이동, 빠르게 두 번 탭해 이전 이동, 다시 길게 눌러 선택
+- 앱 메뉴 마지막의 기기 내 Settings 카드: 브라우저에 입력할 IP와
+  `.local` 주소, 접속한 네트워크, 펌웨어 버전을 표시
 - 웹 대시보드에서 앱을 즉시 전환하고 선택 상태 저장
 - Open-Meteo 현재 날씨와 4일 예보를 사용하는 날씨 화면
 - `000660.KS` 같은 거래소 접미사 심볼을 지원하는 Yahoo Finance 티커와
