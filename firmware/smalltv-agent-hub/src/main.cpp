@@ -119,6 +119,8 @@ static DisplayMode* activeMode(const Settings& s) {
 
 static Settings g_settings;
 
+
+
 #if HAS_TOUCH_BUTTON
 // ---- one-button app menu --------------------------------------------------
 // The Pro has a single capacitive input, so the interaction deliberately stays
@@ -126,8 +128,11 @@ static Settings g_settings;
 static bool     g_touchMenuOpen = false;
 static size_t   g_touchMenuIndex = 0;
 static uint32_t g_touchMenuActivity = 0;
-static uint32_t g_touchMenuLastTap = 0;   // 0 = no tap yet in this menu session
-static bool     g_touchMenuWentForward = false;
+// A tap is not acted on until the double-tap window closes, so the gesture
+// resolves to exactly one move. Nothing is drawn while it is pending either,
+// which leaves the touch sampler free to catch the second tap.
+static bool     g_touchMenuPending = false;
+static uint32_t g_touchMenuPendingAt = 0;
 
 static const char* touchModeLabel(uint8_t mode) {
   switch (mode) {
@@ -156,6 +161,19 @@ static const char* touchMenuLabel(size_t index) {
   return touchMenuIsSettings(index) ? "Settings" : touchModeLabel(touchMenuMode(index));
 }
 
+// The rows share the band between the hint and the footer instead of a fixed
+// pitch, so a build with more features compiled in cannot run its last row into
+// the cancel notice. The cap keeps the common case looking unchanged.
+static const int kTouchMenuTop = 46;
+static int touchMenuStep() { return min(27, (216 - kTouchMenuTop) / (int)touchMenuCount()); }
+
+static void drawTouchMenuRow(Arduino_GFX* gfx, size_t i) {
+  const int y = kTouchMenuTop + (int)i * touchMenuStep();
+  const bool on = (i == g_touchMenuIndex);
+  gfx->fillRect(10, y - 5, TFT_WIDTH - 20, 22, on ? C_BLUE : C_BLACK);
+  gfxDrawCentered(touchMenuLabel(i), y, 2, on ? C_WHITE : C_GRAY);
+}
+
 static void drawTouchMenu() {
   Arduino_GFX* gfx = gfxDev();
   if (!gfx) return;
@@ -163,24 +181,20 @@ static void drawTouchMenu() {
   gfx->fillScreen(C_BLACK);
   gfxDrawCentered("CHOOSE APP", 8, 2, C_WHITE);
   gfxDrawCentered("tap next - 2 taps back - hold ok", 29, 1, C_GRAY);
-
-  // The rows share the band between the hint and the footer instead of a fixed
-  // pitch, so a build with more features compiled in cannot run its last row
-  // into the cancel notice. The cap keeps the common case looking unchanged.
-  const size_t rows = touchMenuCount();
-  const int top = 46;
-  const int step = min(27, (216 - top) / (int)rows);
-
-  for (size_t i = 0; i < rows; i++) {
-    const int y = top + (int)i * step;
-    if (i == g_touchMenuIndex) {
-      gfx->fillRect(10, y - 5, TFT_WIDTH - 20, 22, C_BLUE);
-      gfxDrawCentered(touchMenuLabel(i), y, 2, C_WHITE);
-    } else {
-      gfxDrawCentered(touchMenuLabel(i), y, 2, C_GRAY);
-    }
-  }
+  for (size_t i = 0; i < touchMenuCount(); i++) drawTouchMenuRow(gfx, i);
   gfxDrawCentered("15 sec to cancel", 224, 1, C_DGRAY);
+}
+
+// Moving the highlight repaints the two rows that changed, not the panel. The
+// full-screen version blanked and rewrote 240x240 over SPI on every tap, and
+// touchButtonPoll() cannot sample while that runs — long enough that the second
+// tap of a quick double could begin and end unseen, which is exactly how the
+// gesture went missing.
+static void redrawTouchMenuMove(size_t from) {
+  Arduino_GFX* gfx = gfxDev();
+  if (!gfx || from == g_touchMenuIndex) return;
+  drawTouchMenuRow(gfx, from);
+  drawTouchMenuRow(gfx, g_touchMenuIndex);
 }
 
 static void openTouchMenu() {
@@ -193,8 +207,7 @@ static void openTouchMenu() {
   }
   g_touchMenuOpen = true;
   g_touchMenuActivity = millis();
-  g_touchMenuLastTap = 0;   // the hold that opened the menu is not half a double tap
-  g_touchMenuWentForward = false;
+  g_touchMenuPending = false;   // the hold that opened the menu is not half a tap
   drawTouchMenu();
 }
 
@@ -277,33 +290,54 @@ static void closeTouchMenu(bool choose) {
   if (m) m->wake(g_settings);
 }
 
+static void moveTouchMenu(int delta) {
+  const size_t count = touchMenuCount();
+  const size_t from = g_touchMenuIndex;
+  g_touchMenuIndex = (g_touchMenuIndex + count + delta) % count;
+  redrawTouchMenuMove(from);
+}
+
 static void serviceTouchMenu(TouchButtonEvent event) {
+  const uint32_t now = millis();
+
   if (event == TOUCH_EVENT_SHORT) {
-    const uint32_t now = millis();
-    const size_t count = touchMenuCount();
-    // Two quick taps go back. The first tap has already stepped forward and been
-    // drawn — waiting to find out whether a second one is coming would put that
-    // delay on every single tap, and stepping forward is what the button is for.
-    // So the second tap undoes that step and takes one more, which nets to one
-    // row back. The cost is a brief flash of the row you passed through.
-    // Going back costs two steps only when there is a forward one to undo. Once
-    // the direction has already reversed, each further quick tap is worth a
-    // single row, so holding a fast rhythm rewinds evenly instead of skipping.
-    const bool second = g_touchMenuLastTap && now - g_touchMenuLastTap < TOUCH_DOUBLE_TAP_MS;
-    if (second) {
-      g_touchMenuIndex = (g_touchMenuIndex + count - (g_touchMenuWentForward ? 2 : 1)) % count;
-    } else {
-      g_touchMenuIndex = (g_touchMenuIndex + 1) % count;
-    }
-    g_touchMenuWentForward = !second;
-    g_touchMenuLastTap = now;
     g_touchMenuActivity = now;
-    drawTouchMenu();
-  } else if (event == TOUCH_EVENT_LONG) {
-    closeTouchMenu(true);
-  } else if (millis() - g_touchMenuActivity >= TOUCH_MENU_TIMEOUT_MS) {
-    closeTouchMenu(false);
+    // A tap arriving right after the previous one is the second half of a
+    // double: it cancels the step the first was about to take and goes back one
+    // instead. Judged on how long the finger was off, which is what a double tap
+    // actually controls — the interval between taps also carries however long
+    // the button was held, and that varied enough to lose the gesture.
+    if (g_touchMenuPending && touchButtonLastIdleMs() <= TOUCH_DOUBLE_TAP_MS) {
+      g_touchMenuPending = false;
+      moveTouchMenu(-1);
+      return;
+    }
+    // Otherwise let any step still waiting land, and start waiting on this one.
+    // Steps wait rather than act at once so a double tap resolves to a single
+    // clean move instead of visibly hopping forward and back.
+    if (g_touchMenuPending) moveTouchMenu(1);
+    g_touchMenuPending = true;
+    g_touchMenuPendingAt = now;
+    return;
   }
+
+  if (event == TOUCH_EVENT_LONG) {
+    // Holding before the wait is over still means "the row that tap was taking
+    // me to", so let it land rather than choosing the row under the old highlight.
+    if (g_touchMenuPending) {
+      g_touchMenuPending = false;
+      moveTouchMenu(1);
+    }
+    closeTouchMenu(true);
+    return;
+  }
+
+  if (g_touchMenuPending && now - g_touchMenuPendingAt >= TOUCH_TAP_COMMIT_MS) {
+    g_touchMenuPending = false;
+    moveTouchMenu(1);
+    return;
+  }
+  if (now - g_touchMenuActivity >= TOUCH_MENU_TIMEOUT_MS) closeTouchMenu(false);
 }
 #endif
 
@@ -344,6 +378,7 @@ void appApplyBrightness() {
 
 // Exposed to the web portal (/api/status) so the last reset reason is visible.
 const char* appResetReason() { return g_resetReason.c_str(); }
+
 
 // Called by the web portal after settings are applied: re-init every mode and
 // force a fresh repaint so a mode/URL/symbol change takes effect immediately.

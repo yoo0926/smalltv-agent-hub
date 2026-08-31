@@ -69,10 +69,18 @@
 #endif
 #define TOUCH_LONG_PRESS_MS    900UL
 #define TOUCH_MENU_TIMEOUT_MS 15000UL
-// Two taps inside this window step the app menu backwards. Deliberately short:
-// scanning a menu forward is the common case and lands around half a second
-// apart, so the window has to stay under that or ordinary tapping would reverse.
-#define TOUCH_DOUBLE_TAP_MS     300UL
+// A tap whose finger-off time is under this is the second half of a double tap,
+// and steps the app menu backwards instead of forwards. Measured on hardware via
+// touch.lastIdleMs: a deliberate double tap is 80 ms every time, and the pause
+// between separate gestures never came under 660 ms. Judging on finger-off time
+// rather than tap-to-tap interval is what makes this reliable — the interval
+// also carries the press duration, which varied from 100 to 300 ms and pushed
+// the gesture over the line whenever the button was held a little longer.
+#define TOUCH_DOUBLE_TAP_MS     250UL
+// How long a single tap waits to see whether a second one follows. Must cover a
+// whole second tap arriving: its finger-off time, then however long it is held,
+// then the release debounce.
+#define TOUCH_TAP_COMMIT_MS     450UL
 // No real touch lasts this long, so a press still held after it means the
 // baseline has wandered away from the true untouched reading and the button is
 // latched. Adopting the current reading is the only way back without a reboot.
