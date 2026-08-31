@@ -13,7 +13,15 @@ from urllib.request import Request, urlopen
 
 
 MAX_DEVICE_AGENTS = 4
+# The alert screen centres one line of size-2 text across 240 px, which is the
+# firmware's NOTIFY_LABEL_MAX.
 MAX_DEVICE_LABEL = 20
+# How many characters the Agent Hub layout leaves for a label, keyed by the
+# number of rows on screen. These mirror the compactLabel() budgets in the
+# firmware's AgentMode.cpp: a lone hero row is roomier than a pair of cards.
+# Spending the same budget here keeps the firmware from cutting a second time,
+# from the front, which would undo the shortening below.
+LAYOUT_LABEL_BUDGET = {1: 19, 2: 15, 3: 16, 4: 16}
 COMPLETED_VISIBLE_FOR = timedelta(minutes=10)
 
 # Which session speaks for a workspace: the ones asking for a human first, then
@@ -45,10 +53,28 @@ def _workspace_still_busy(agent: Dict[str, Any], snapshot: Dict[str, Any]) -> bo
     )
 
 
-def _ascii_label(value: Any, fallback: str = "agent") -> str:
+def _shorten(text: str, budget: int) -> str:
+    """Drop the middle of an over-long label instead of its tail.
+
+    A branch is identified by its front and told apart from its siblings by its
+    back, so ``verify-local-agent-hub-status`` and its ``-v1`` variant have to
+    keep both ends to stay distinct in fifteen columns. The odd character goes
+    to the front, which carries more meaning. The gap is two ASCII dots because
+    the firmware font has no ellipsis glyph.
+    """
+    if len(text) <= budget:
+        return text
+    if budget <= 2:
+        return text[:budget]
+    keep = budget - 2
+    head = (keep + 1) // 2
+    return text[:head] + ".." + text[len(text) - (keep - head) :]
+
+
+def _ascii_label(value: Any, fallback: str = "agent", budget: int = MAX_DEVICE_LABEL) -> str:
     text = "".join(char for char in str(value or "") if " " <= char <= "~")
     text = " ".join(text.split())
-    return (text or fallback)[:MAX_DEVICE_LABEL]
+    return _shorten(text or fallback, budget)
 
 
 def _branch_label(agent: Dict[str, Any]) -> str:
@@ -63,7 +89,7 @@ def _branch_label(agent: Dict[str, Any]) -> str:
     return "" if branch in GENERIC_BRANCHES else branch
 
 
-def _display_label(agent: Dict[str, Any]) -> str:
+def _display_label(agent: Dict[str, Any], budget: int = MAX_DEVICE_LABEL) -> str:
     """Name a workspace by its branch, falling back to the Conductor name.
 
     ``CONDUCTOR_WORKSPACE_NAME`` is frozen into the agent process environment at
@@ -71,7 +97,9 @@ def _display_label(agent: Dict[str, Any]) -> str:
     was created with until a new session replaces it. The branch is re-read from
     git on every event, so it stays current.
     """
-    return _ascii_label(_branch_label(agent) or agent.get("workspace"), agent.get("agent") or "agent")
+    return _ascii_label(
+        _branch_label(agent) or agent.get("workspace"), agent.get("agent") or "agent", budget
+    )
 
 
 def _is_stale(item: Dict[str, Any], now: datetime) -> bool:
@@ -98,18 +126,27 @@ def dashboard_payload(snapshot: Dict[str, Any], now: Optional[datetime] = None) 
         if state in {"done", "failed"} and _is_stale(item, now):
             continue
         key = _workspace_key(item)
-        candidate = {
-            "label": _display_label(item),
-            "agent": _ascii_label(item.get("agent"), "agent")[:8].lower(),
-            "state": state,
-        }
         current = groups.get(key)
         if current is None:
-            groups[key] = candidate
+            groups[key] = item
             order.append(key)
-        elif STATE_PRIORITY.get(state, 0) > STATE_PRIORITY.get(current["state"], 0):
-            groups[key] = candidate
-    return {"agents": [groups[key] for key in order[:MAX_DEVICE_AGENTS]]}
+        elif STATE_PRIORITY.get(state, 0) > STATE_PRIORITY.get(str(current.get("state") or ""), 0):
+            groups[key] = item
+    # How much room a label gets depends on the layout the firmware picks, and
+    # that depends on how many rows survive the grouping. So labels are only
+    # written once the final row count is known.
+    shown = [groups[key] for key in order[:MAX_DEVICE_AGENTS]]
+    budget = LAYOUT_LABEL_BUDGET.get(len(shown), MAX_DEVICE_LABEL)
+    return {
+        "agents": [
+            {
+                "label": _display_label(item, budget),
+                "agent": _ascii_label(item.get("agent"), "agent")[:8].lower(),
+                "state": str(item.get("state") or "idle"),
+            }
+            for item in shown
+        ]
+    }
 
 
 def alert_payload(
@@ -128,9 +165,10 @@ def alert_payload(
         notify_state = "waiting"
     else:
         return None
-    label = _display_label(agent)
-    if state == "failed":
-        label = _ascii_label("FAIL " + label)
+    # "FAIL " spends five of the alert screen's twenty columns, so the name it
+    # introduces is shortened to what is left rather than cut off the end.
+    prefix = "FAIL " if state == "failed" else ""
+    label = prefix + _display_label(agent, MAX_DEVICE_LABEL - len(prefix))
     return {"state": notify_state, "ttl": 20, "label": label}
 
 

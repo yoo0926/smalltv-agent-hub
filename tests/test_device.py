@@ -27,7 +27,7 @@ class DevicePayloadTests(unittest.TestCase):
         }
         payload = dashboard_payload(snapshot)
         self.assertEqual(len(payload["agents"]), 4)
-        self.assertEqual(payload["agents"][0]["label"], "a-very-long-workspac")
+        self.assertEqual(payload["agents"][0]["label"], "a-very-..ce-name")
         self.assertNotIn("message", payload["agents"][0])
         self.assertNotIn("cwd", payload["agents"][0])
 
@@ -126,7 +126,7 @@ class DevicePayloadTests(unittest.TestCase):
                 ]
             }
         )
-        self.assertEqual(payload["agents"][0]["label"], "public-error-user-ag")
+        self.assertEqual(payload["agents"][0]["label"], "public-er..er-agent")
 
     def test_a_branch_naming_no_particular_work_yields_to_the_workspace(self):
         def label_for(branch):
@@ -165,7 +165,87 @@ class DevicePayloadTests(unittest.TestCase):
         }
         self.assertEqual(alert_payload(finished)["label"], "verify-hub-status")
         failed = {**finished, "state": "failed"}
-        self.assertEqual(alert_payload(failed)["label"], "FAIL verify-hub-stat")
+        self.assertEqual(alert_payload(failed)["label"], "FAIL verify-..status")
+
+    def test_branches_alike_at_the_front_stay_apart_on_the_display(self):
+        # The two workspaces that produced this feature: their branches share a
+        # prefix longer than a two-card row can hold, so cutting the tail would
+        # render both as the same name.
+        payload = dashboard_payload(
+            {
+                "agents": [
+                    {
+                        "workspace_path": "/ws/roseau",
+                        "branch": "verify-local-agent-hub-status",
+                        "agent": "claude",
+                        "state": "working",
+                    },
+                    {
+                        "workspace_path": "/ws/austin",
+                        "branch": "verify-local-agent-hub-status-v1",
+                        "agent": "claude",
+                        "state": "working",
+                    },
+                ]
+            }
+        )
+        labels = [row["label"] for row in payload["agents"]]
+        self.assertEqual(labels, ["verify-..status", "verify-..tus-v1"])
+        self.assertEqual(len(set(labels)), 2)
+
+    def test_label_budget_follows_the_layout_the_row_count_picks(self):
+        def label_with(rows):
+            snapshot = {
+                "agents": [
+                    {
+                        "workspace_path": "/ws/%d" % i,
+                        "branch": "flight-monthly-price-improvement",
+                        "agent": "claude",
+                        "state": "working",
+                    }
+                    for i in range(rows)
+                ]
+            }
+            return dashboard_payload(snapshot)["agents"][0]["label"]
+
+        # The firmware's own budgets: a lone hero row, a pair of cards, dense rows.
+        self.assertEqual(len(label_with(1)), 19)
+        self.assertEqual(len(label_with(2)), 15)
+        self.assertEqual(len(label_with(3)), 16)
+        self.assertEqual(len(label_with(4)), 16)
+
+    def test_a_label_that_already_fits_is_left_alone(self):
+        payload = dashboard_payload(
+            {
+                "agents": [
+                    {
+                        "workspace_path": "/ws/one",
+                        "branch": "eks-migration",
+                        "agent": "claude",
+                        "state": "working",
+                    },
+                    {
+                        "workspace_path": "/ws/two",
+                        "branch": "desk-hub",
+                        "agent": "codex",
+                        "state": "working",
+                    },
+                ]
+            }
+        )
+        self.assertEqual([row["label"] for row in payload["agents"]], ["eks-migration", "desk-hub"])
+
+    def test_shortening_keeps_both_ends_and_spends_the_whole_budget(self):
+        from geekmagic_hub.device import _shorten
+
+        self.assertEqual(_shorten("datadog-oncall-issue-check", 15), "datadog..-check")
+        # An odd budget gives its spare character to the front, which carries
+        # more meaning; an even one splits evenly.
+        self.assertEqual(_shorten("abcdefghij", 5), "ab..j")
+        self.assertEqual(_shorten("abcdefghij", 6), "ab..ij")
+        self.assertEqual(_shorten("abcdefghij", 7), "abc..ij")
+        for budget in range(3, 20):
+            self.assertEqual(len(_shorten("a" * 40, budget)), budget)
 
     def test_finished_work_leaves_the_display_after_ten_minutes(self):
         def rows_after(minutes):

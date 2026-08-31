@@ -31,7 +31,7 @@ Local-only status bridge for Conductor sessions running Claude Code and Codex. T
 
 A workspace speaks with one voice on the display: among its sessions, `needs_input` outranks `failed`, which outranks `working`, which outranks `done`. A `done` alert is therefore suppressed while another session in the same workspace is still running, and finished work leaves the display after ten minutes.
 
-A row is named after its git branch rather than `CONDUCTOR_WORKSPACE_NAME`, because Conductor freezes that variable into the session process at launch: a workspace renamed afterwards keeps announcing the codename it was created with until a new session replaces it. The branch is re-read on every event, and Conductor derives the workspace name from it anyway. A branch's conventional type prefix is dropped, so `fix/public-error-user-agent` shows as `public-error-user-agent`. A branch that names no particular work — `main` or `master` — yields to the workspace name, which yields in turn to the agent type. Labels are cut to twenty characters by the firmware's buffer, so branches that differ only in a suffix can look alike on the display.
+A row is named after its git branch rather than `CONDUCTOR_WORKSPACE_NAME`, because Conductor freezes that variable into the session process at launch: a workspace renamed afterwards keeps announcing the codename it was created with until a new session replaces it. The branch is re-read on every event, and Conductor derives the workspace name from it anyway. A branch's conventional type prefix is dropped, so `fix/public-error-user-agent` shows as `public-error-user-agent`. A branch that names no particular work — `main` or `master` — yields to the workspace name, which yields in turn to the agent type. A label too long for the layout loses its middle rather than its tail — `verify-local-agent-hub-status` and its `-v1` variant become `verify-..status` and `verify-..tus-v1` — because a branch is identified by its front and told apart from its siblings by its back. The budget follows the layout the row count picks, matching the firmware so it never shortens a second time: nineteen characters for a lone row, fifteen for a pair of cards, sixteen for three or four, and twenty on the alert screen.
 
 Prompts and assistant responses are not persisted in the state file or offline queue. The display API emits short lifecycle messages such as `Working`, `Permission required`, and `Turn complete`.
 
@@ -101,7 +101,7 @@ The SmallTV pulls no data from the Mac. The bridge pushes outward, so the HTTP s
 ./bin/desk-hub --device-url http://DEVICE_IP
 ```
 
-Only the agent type, short workspace label, and lifecycle state are sent to the display. That label is the branch name, so treat branch names as visible on the desk; a branch's type prefix is dropped and the rest is cut to twenty printable ASCII characters. Prompts, responses, file paths, and service credentials stay on the Mac.
+Only the agent type, short workspace label, and lifecycle state are sent to the display. That label is the branch name, so treat branch names as visible on the desk; a branch's type prefix is dropped and the rest is reduced to printable ASCII within the layout's budget. Prompts, responses, file paths, and service credentials stay on the Mac.
 
 The firmware's optional web password also protects `/api/agents` and `/api/notify`. Leave it disabled for this first local setup; digest-auth support can be added to the Mac push client before enabling it.
 

@@ -5,6 +5,10 @@ All notable user-visible changes are recorded here. The project follows
 
 ## Unreleased
 
+- Fixed two workspaces whose branches share a long prefix rendering as the
+  same name. Labels now lose their middle rather than their tail, and the
+  bridge spends the same per-layout budget the firmware does, so the display no
+  longer shortens a second time from the front.
 - Fixed a workspace renamed after its session started showing its old
   creation-time codename on the display. Conductor freezes
   `CONDUCTOR_WORKSPACE_NAME` into the session process at launch, so rows are
