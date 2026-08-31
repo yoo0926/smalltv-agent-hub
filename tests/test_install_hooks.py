@@ -51,6 +51,30 @@ class InstallHookTests(unittest.TestCase):
         self.assertIn('notify = ["desk-hub-event", "codex"]', updated)
         self.assertIn('model = "example"', updated)
 
+    def test_codex_multiline_notify_is_parsed_and_replaced(self):
+        original = (
+            'model = "example"\n'
+            "notify = [\n"
+            '    "/Applications/Other.app/Contents/MacOS/Other",\n'
+            '    "turn-ended",\n'
+            "]\n"
+            'service_tier = "priority"\n'
+        )
+        argv, _ = parse_notify(original)
+        self.assertEqual(
+            argv, ["/Applications/Other.app/Contents/MacOS/Other", "turn-ended"]
+        )
+        updated = replace_notify(original, ["desk-hub-event", "codex"])
+        self.assertEqual(updated.count("notify ="), 1)
+        self.assertIn('notify = ["desk-hub-event", "codex"]', updated)
+        self.assertIn('service_tier = "priority"', updated)
+        self.assertNotIn("turn-ended", updated)
+
+    def test_codex_unparseable_notify_is_never_duplicated(self):
+        original = 'notify = "not-an-array"\nmodel = "example"\n'
+        with self.assertRaises(ValueError):
+            replace_notify(original, ["desk-hub-event", "codex"])
+
     def test_codex_notify_is_added_when_missing(self):
         updated = replace_notify('model = "example"\n', ["desk-hub-event", "codex"])
         self.assertTrue(updated.startswith('notify = ["desk-hub-event", "codex"]\n'))

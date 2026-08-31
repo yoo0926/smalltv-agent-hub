@@ -5,6 +5,10 @@ All notable user-visible changes are recorded here. The project follows
 
 ## Unreleased
 
+- Fixed interactive setup corrupting `~/.codex/config.toml` when the existing
+  `notify` command spanned several lines. Setup could leave two top-level
+  `notify` keys, which made Codex fail to start; it now refuses to write rather
+  than duplicate a key it cannot parse.
 - Split fresh-Mac onboarding into a repository-local build and an interactive
   setup command with Git-ignored, reusable `.env` defaults.
 - Added reproducible macOS bootstrap, pinned firmware dependencies, root CI,
