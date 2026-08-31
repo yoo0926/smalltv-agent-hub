@@ -186,6 +186,8 @@ static void handleStatus() {
     t["triggerDelta"] = touchButtonTriggerDelta();
     t["pressed"] = touchButtonPressed();
     t["lastEvent"] = touchButtonLastEvent();
+    t["lastIdleMs"] = touchButtonLastIdleMs();
+    t["maxPollGapMs"] = touchButtonMaxPollGapMs();
   }
 
 #if WITH_WEATHER

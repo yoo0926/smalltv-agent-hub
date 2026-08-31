@@ -19,3 +19,9 @@ uint32_t    touchButtonRaw();
 uint32_t    touchButtonBaseline();
 uint32_t    touchButtonTriggerDelta();
 const char* touchButtonLastEvent();
+// Finger-off time before the most recent tap. Independent of how long the button
+// was then held, which is why the double-tap gesture is judged on this.
+uint32_t    touchButtonLastIdleMs();
+// Longest gap ever seen between poll() calls: the sampler must run every 20 ms
+// or a brief tap goes unobserved entirely.
+uint32_t    touchButtonMaxPollGapMs();

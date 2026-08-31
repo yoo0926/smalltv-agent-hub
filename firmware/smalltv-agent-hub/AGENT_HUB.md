@@ -47,9 +47,13 @@ The top capacitive button is intentionally limited to a few predictable actions:
 - Tap while a full-screen notification is visible to dismiss it.
 - Hold for about one second to open the app menu.
 - In the menu, tap to move to the next app and hold to select it.
-- Two quick taps (within 300 ms) move back one row instead. The first tap has
-  already stepped forward by then, so you see it pass through the row it
-  skipped; waiting to tell the two apart would put that delay on every tap.
+- Two quick taps move back one row instead. A tap waits a moment to see whether
+  a second one follows, so the gesture resolves to a single clean move; the
+  second tap is recognised by how briefly the finger was off, not by the
+  interval between taps, which also carries however long the button was held.
+- Touch is sampled on its own task rather than from the main loop. A tap is only
+  a tenth of a second of contact, and serving one HTTP request blocks the loop
+  for about that long, which used to lose taps outright.
 - Leave the menu untouched for 15 seconds to cancel without changing apps.
 - The menu's last row is **Settings**, which is a card rather than an app: it
   shows the address to open in a browser, the network that address came from,

@@ -65,7 +65,13 @@ All notable user-visible changes are recorded here. The project follows
   the whole upload queued behind it.
 - Added moving backwards through the SmallTV Pro app menu with two quick taps.
   The menu only went forward, so reaching the row above meant going all the way
-  round.
+  round. A tap waits briefly to see whether a second follows, so the gesture
+  makes one clean move rather than visibly stepping forward and back.
+- Fixed the touch button losing taps whenever the device was busy. Sampling ran
+  on the main loop, which serving a single HTTP request blocks for about a tenth
+  of a second — as long as a tap lasts — so taps were missed entirely and the
+  double-tap gesture mostly failed. Sampling now runs on its own task, which the
+  scheduler keeps going regardless of what the rest of the firmware is doing.
 - Added a Settings card to the end of the SmallTV Pro app menu. Setting up a new
   device previously meant catching the address on the boot banner before it
   disappeared; the card brings it back on demand, showing the IP to type into a
