@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import Any, Deque, Dict, List, Optional
@@ -24,6 +25,13 @@ MAX_DEVICE_LABEL = 20
 LAYOUT_LABEL_BUDGET = {1: 19, 2: 15, 3: 16, 4: 16}
 COMPLETED_VISIBLE_FOR = timedelta(minutes=10)
 
+# A session only leaves "working" when it reports an end, so a terminal closed
+# mid-turn leaves one running forever. The store keeps those on purpose, but the
+# display has four rows: past this window a live session is treated as abandoned
+# so it stops speaking for its workspace. Long enough that no real turn reaches
+# it, short enough that a forgotten row does not survive the day.
+LIVE_VISIBLE_FOR = timedelta(hours=6)
+
 # Which session speaks for a workspace: the ones asking for a human first, then
 # the ones still moving, and only then the ones that have finished.
 STATE_PRIORITY = {"done": 1, "working": 2, "failed": 3, "needs_input": 4}
@@ -34,6 +42,13 @@ LIVE_STATES = frozenset({"working", "needs_input"})
 # Branch names shared by every workspace of a repository, so they identify none
 # of them.
 GENERIC_BRANCHES = frozenset({"main", "master"})
+
+# How long a queued attention overlay stays worth delivering. Alerts are drained
+# before the push, so a device that is merely slow used to destroy them; they are
+# put back on failure instead. Not forever, though -- replaying "waiting" from
+# half an hour ago after a long outage is noise, which is what the old
+# drop-everything behaviour was reaching for.
+ALERT_RETRY_FOR = 120.0
 
 
 def _workspace_key(agent: Dict[str, Any]) -> str:
@@ -102,14 +117,16 @@ def _display_label(agent: Dict[str, Any], budget: int = MAX_DEVICE_LABEL) -> str
     )
 
 
-def _is_stale(item: Dict[str, Any], now: datetime) -> bool:
+def _is_stale(item: Dict[str, Any], now: datetime, older_than: timedelta = COMPLETED_VISIBLE_FOR) -> bool:
     try:
         updated = datetime.fromisoformat(str(item.get("updated_at") or "").replace("Z", "+00:00"))
     except ValueError:
+        # No usable timestamp: treat it as current rather than hide it. A row
+        # that never reports a time is a bug worth seeing, not one to swallow.
         return False
     if updated.tzinfo is None:
         updated = updated.replace(tzinfo=timezone.utc)
-    return now - updated > COMPLETED_VISIBLE_FOR
+    return now - updated > older_than
 
 
 def dashboard_payload(snapshot: Dict[str, Any], now: Optional[datetime] = None) -> Dict[str, Any]:
@@ -124,6 +141,8 @@ def dashboard_payload(snapshot: Dict[str, Any], now: Optional[datetime] = None) 
         if state == "idle":
             continue
         if state in {"done", "failed"} and _is_stale(item, now):
+            continue
+        if state in LIVE_STATES and _is_stale(item, now, LIVE_VISIBLE_FOR):
             continue
         key = _workspace_key(item)
         current = groups.get(key)
@@ -175,13 +194,18 @@ def alert_payload(
 class DeviceNotifier:
     """Coalesce snapshots and push them without delaying coding-agent hooks."""
 
-    def __init__(self, base_url: str, timeout: float = 1.5, refresh_sec: float = 30.0) -> None:
+    # 1.5 s was under the device's measured worst-case response (~4 s): the
+    # single-threaded firmware legitimately spends seconds rendering a frame, and
+    # a push abandoned that early reports a healthy device as broken.
+    def __init__(self, base_url: str, timeout: float = 6.0, refresh_sec: float = 30.0) -> None:
         self.base_url = base_url.rstrip("/") + "/"
         self.timeout = timeout
         self.refresh_sec = refresh_sec
         self._condition = threading.Condition()
         self._latest: Optional[Dict[str, Any]] = None
-        self._alerts: Deque[Dict[str, Any]] = deque(maxlen=16)
+        # (deadline, payload): the deadline is what lets a failed push put an
+        # alert back without resurrecting one that is no longer worth showing.
+        self._alerts: Deque[tuple] = deque(maxlen=16)
         self._dirty = False
         self._stopping = False
         self._last_ok = ""
@@ -195,7 +219,7 @@ class DeviceNotifier:
             self._latest = dashboard_payload(snapshot)
             self._dirty = True
             if alert:
-                self._alerts.append(alert)
+                self._alerts.append((time.monotonic() + ALERT_RETRY_FOR, alert))
             self._condition.notify()
 
     def status(self) -> Dict[str, Any]:
@@ -241,7 +265,7 @@ class DeviceNotifier:
                 continue
             try:
                 self._post("api/agents", latest)
-                for alert in alerts:
+                for _, alert in alerts:
                     self._post("api/notify", alert)
                 now = datetime.now(timezone.utc).isoformat(timespec="seconds")
                 with self._condition:
@@ -249,7 +273,12 @@ class DeviceNotifier:
                     self._last_error = ""
             except (OSError, HTTPError, URLError) as exc:
                 # A later event or the 30-second refresh retries the current
-                # dashboard. Old attention overlays are deliberately not
-                # replayed after a device has been offline for a long time.
+                # dashboard. The alerts go back at the front of the queue so a
+                # device that was briefly busy still gets them -- but only while
+                # they are recent, because replaying an old overlay after a long
+                # outage says nothing useful about now.
+                keep = [item for item in alerts if item[0] > time.monotonic()]
                 with self._condition:
+                    if keep:
+                        self._alerts.extendleft(reversed(keep))
                     self._last_error = str(exc)[:160]

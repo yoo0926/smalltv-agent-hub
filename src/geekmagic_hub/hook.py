@@ -16,6 +16,10 @@ from .events import ACTIVITY_EVENTS
 ACTIVITY_THROTTLE_SEC = 10.0
 STAMP_TTL_SEC = 3600.0
 
+# Upper bound on the offline queue. Only a server start drains it, so a stopped
+# bridge would otherwise let it grow for as long as agents keep running.
+SPOOL_MAX_BYTES = 5 * 1024 * 1024
+
 
 def claim_activity_slot(stamp_path: Path, now: float, interval: float = ACTIVITY_THROTTLE_SEC) -> bool:
     """Report whether this activity event may be sent, and record that it was.
@@ -78,11 +82,44 @@ def post_event(url: str, token: str, envelope: Dict[str, Any], timeout: float = 
         return False
 
 
+def _trim_spool(path: Path) -> None:
+    """Drop the oldest half of the spool once it is over the cap.
+
+    Halving rather than trimming to the line keeps this off the hot path: it
+    runs once every few thousand events instead of on every append. The oldest
+    events are the ones to lose -- the display only ever shows current state, so
+    a replayed hour-old event is overwritten by the next one anyway.
+    """
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return
+    keep = lines[len(lines) // 2 :]
+    # Per-process name: hooks from several agents can reach this at the same
+    # time, and a shared scratch file would let two of them interleave writes
+    # and then publish the mixture. os.replace is atomic, so the worst a race
+    # can now cost is one trim overwriting another's.
+    tmp = path.with_suffix(f"{path.suffix}.{os.getpid()}.trim")
+    try:
+        tmp.write_text("\n".join(keep) + ("\n" if keep else ""), encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+
+
 def spool_event(path: Path, envelope: Dict[str, Any]) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(envelope, ensure_ascii=False) + "\n")
+        # Only the server start drains this, so with the bridge stopped it grows
+        # for as long as agents keep running. It lives in a cache directory and
+        # nothing else bounds it.
+        if path.stat().st_size > SPOOL_MAX_BYTES:
+            _trim_spool(path)
     except OSError:
         # Hooks must never break or delay the coding agent.
         pass

@@ -126,6 +126,8 @@ static Settings g_settings;
 static bool     g_touchMenuOpen = false;
 static size_t   g_touchMenuIndex = 0;
 static uint32_t g_touchMenuActivity = 0;
+static uint32_t g_touchMenuLastTap = 0;   // 0 = no tap yet in this menu session
+static bool     g_touchMenuWentForward = false;
 
 static const char* touchModeLabel(uint8_t mode) {
   switch (mode) {
@@ -140,10 +142,18 @@ static const char* touchModeLabel(uint8_t mode) {
   }
 }
 
-static size_t touchMenuCount() { return kModeCount + 1; }
+// Two rows follow the compiled-in apps: Carousel, then Settings. Settings is not
+// an app — picking it opens a card and leaves settings.mode alone (see below).
+static size_t touchMenuCount() { return kModeCount + 2; }
+
+static bool touchMenuIsSettings(size_t index) { return index == kModeCount + 1; }
 
 static uint8_t touchMenuMode(size_t index) {
   return index < kModeCount ? kModes[index]->modeConst() : MODE_CAROUSEL;
+}
+
+static const char* touchMenuLabel(size_t index) {
+  return touchMenuIsSettings(index) ? "Settings" : touchModeLabel(touchMenuMode(index));
 }
 
 static void drawTouchMenu() {
@@ -152,15 +162,22 @@ static void drawTouchMenu() {
 
   gfx->fillScreen(C_BLACK);
   gfxDrawCentered("CHOOSE APP", 8, 2, C_WHITE);
-  gfxDrawCentered("tap next - hold select", 29, 1, C_GRAY);
+  gfxDrawCentered("tap next - 2 taps back - hold ok", 29, 1, C_GRAY);
 
-  for (size_t i = 0; i < touchMenuCount(); i++) {
-    const int y = 50 + (int)i * 27;
+  // The rows share the band between the hint and the footer instead of a fixed
+  // pitch, so a build with more features compiled in cannot run its last row
+  // into the cancel notice. The cap keeps the common case looking unchanged.
+  const size_t rows = touchMenuCount();
+  const int top = 46;
+  const int step = min(27, (216 - top) / (int)rows);
+
+  for (size_t i = 0; i < rows; i++) {
+    const int y = top + (int)i * step;
     if (i == g_touchMenuIndex) {
       gfx->fillRect(10, y - 5, TFT_WIDTH - 20, 22, C_BLUE);
-      gfxDrawCentered(touchModeLabel(touchMenuMode(i)), y, 2, C_WHITE);
+      gfxDrawCentered(touchMenuLabel(i), y, 2, C_WHITE);
     } else {
-      gfxDrawCentered(touchModeLabel(touchMenuMode(i)), y, 2, C_GRAY);
+      gfxDrawCentered(touchMenuLabel(i), y, 2, C_GRAY);
     }
   }
   gfxDrawCentered("15 sec to cancel", 224, 1, C_DGRAY);
@@ -176,11 +193,75 @@ static void openTouchMenu() {
   }
   g_touchMenuOpen = true;
   g_touchMenuActivity = millis();
+  g_touchMenuLastTap = 0;   // the hold that opened the menu is not half a double tap
+  g_touchMenuWentForward = false;
   drawTouchMenu();
 }
 
+// ---- settings card --------------------------------------------------------
+// Deliberately not a DisplayMode: the boot banner already shows the address and
+// then leaves, and this is the way back to it — so it must not become the boot
+// default, must not join the carousel, and must not need a settings slice. It
+// borrows the menu's interaction instead: tap to leave, hold for the menu.
+static bool     g_settingsCardOpen = false;
+static uint32_t g_settingsCardOpenedAt = 0;
+static uint32_t g_settingsCardPolled = 0;
+static String   g_settingsCardIp;
+static String   g_settingsCardSsid;
+
+static void drawSettingsCard() {
+  g_settingsCardIp = netIP();
+  g_settingsCardSsid = netSSID();
+  gfxSettingsInfo(g_settingsCardSsid.c_str(), netRSSI(), g_settingsCardIp.c_str(),
+                  g_settings.hostname.c_str(), FW_VERSION " - " FW_VARIANT);
+}
+
+static void openSettingsCard() {
+  g_settingsCardOpen = true;
+  g_settingsCardOpenedAt = millis();
+  g_settingsCardPolled = g_settingsCardOpenedAt;
+  drawSettingsCard();
+}
+
+static void closeSettingsCard() {
+  g_settingsCardOpen = false;
+  DisplayMode* m = activeMode(g_settings);
+  if (m) m->wake(g_settings);
+}
+
+static void serviceSettingsCard(TouchButtonEvent event) {
+#if WITH_NOTIFY
+  // An alert outranks a card someone opened to read an address off; drop the card
+  // without repainting, because the overlay is about to cover the screen anyway.
+  if (g_notifyMode.active()) {
+    g_settingsCardOpen = false;
+    return;
+  }
+#endif
+  if (event == TOUCH_EVENT_SHORT) {
+    closeSettingsCard();
+    return;
+  }
+  if (event == TOUCH_EVENT_LONG) {
+    g_settingsCardOpen = false;   // straight back to the menu, no repaint in between
+    openTouchMenu();
+    return;
+  }
+  if (millis() - g_settingsCardOpenedAt >= SETTINGS_SCREEN_TIMEOUT_MS) {
+    closeSettingsCard();
+    return;
+  }
+  // A lease can be renewed onto a different address while the card is up, which
+  // is exactly when a stale one does the most damage. Poll slowly and repaint
+  // only on a real change, so the panel isn't rewritten every tick.
+  if (millis() - g_settingsCardPolled < 1000) return;
+  g_settingsCardPolled = millis();
+  if (netIP() != g_settingsCardIp || netSSID() != g_settingsCardSsid) drawSettingsCard();
+}
+
 static void closeTouchMenu(bool choose) {
-  if (choose) {
+  const bool settings = choose && touchMenuIsSettings(g_touchMenuIndex);
+  if (choose && !settings) {
     g_settings.mode = touchMenuMode(g_touchMenuIndex);
     saveSettings(g_settings);
     if (g_settings.mode == MODE_CAROUSEL) g_carIdx = 0;
@@ -188,14 +269,35 @@ static void closeTouchMenu(bool choose) {
   }
 
   g_touchMenuOpen = false;
+  if (settings) {
+    openSettingsCard();
+    return;
+  }
   DisplayMode* m = activeMode(g_settings);
   if (m) m->wake(g_settings);
 }
 
 static void serviceTouchMenu(TouchButtonEvent event) {
   if (event == TOUCH_EVENT_SHORT) {
-    g_touchMenuIndex = (g_touchMenuIndex + 1) % touchMenuCount();
-    g_touchMenuActivity = millis();
+    const uint32_t now = millis();
+    const size_t count = touchMenuCount();
+    // Two quick taps go back. The first tap has already stepped forward and been
+    // drawn — waiting to find out whether a second one is coming would put that
+    // delay on every single tap, and stepping forward is what the button is for.
+    // So the second tap undoes that step and takes one more, which nets to one
+    // row back. The cost is a brief flash of the row you passed through.
+    // Going back costs two steps only when there is a forward one to undo. Once
+    // the direction has already reversed, each further quick tap is worth a
+    // single row, so holding a fast rhythm rewinds evenly instead of skipping.
+    const bool second = g_touchMenuLastTap && now - g_touchMenuLastTap < TOUCH_DOUBLE_TAP_MS;
+    if (second) {
+      g_touchMenuIndex = (g_touchMenuIndex + count - (g_touchMenuWentForward ? 2 : 1)) % count;
+    } else {
+      g_touchMenuIndex = (g_touchMenuIndex + 1) % count;
+    }
+    g_touchMenuWentForward = !second;
+    g_touchMenuLastTap = now;
+    g_touchMenuActivity = now;
     drawTouchMenu();
   } else if (event == TOUCH_EVENT_LONG) {
     closeTouchMenu(true);
@@ -267,6 +369,7 @@ bool appActivateMode(uint8_t mode) {
 #endif
 #if HAS_TOUCH_BUTTON
   g_touchMenuOpen = false;
+  g_settingsCardOpen = false;
 #endif
   g_settings.mode = mode;
   saveSettings(g_settings);
@@ -419,6 +522,12 @@ void loop() {
   const TouchButtonEvent touchEvent = touchButtonPoll();
   if (g_touchMenuOpen) {
     serviceTouchMenu(touchEvent);
+    delay(5);
+    return;
+  }
+
+  if (g_settingsCardOpen) {
+    serviceSettingsCard(touchEvent);
     delay(5);
     return;
   }

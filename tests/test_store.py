@@ -78,6 +78,19 @@ class StorePruningTests(unittest.TestCase):
             self.store.apply("claude", claude_event(f"s{index}", "SessionEnd", workspace=f"ws{index}"))
         self.assertLessEqual(len(self.store.snapshot()["agents"]), MAX_TRACKED_SESSIONS)
 
+    def test_abandoned_running_sessions_cannot_pin_the_store_open(self):
+        """A session killed mid-turn never reports an end, so it stays "working"
+        forever. Those are exempt from both pruners, so if the cap could not
+        evict them a terminal closed often enough would grow the store without
+        limit -- which is the one thing the cap exists to prevent."""
+        for index in range(MAX_TRACKED_SESSIONS + 25):
+            self.store.apply("claude", claude_event(f"s{index}", "UserPromptSubmit", workspace="alpha"))
+        agents = self.store.snapshot()["agents"]
+        self.assertLessEqual(len(agents), MAX_TRACKED_SESSIONS)
+        # The survivors are the newest, not an arbitrary slice.
+        self.assertIn("s224", [a["session_id"] for a in agents])
+        self.assertNotIn("s0", [a["session_id"] for a in agents])
+
 
 if __name__ == "__main__":
     unittest.main()

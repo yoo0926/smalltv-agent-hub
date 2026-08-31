@@ -69,6 +69,25 @@
 #endif
 #define TOUCH_LONG_PRESS_MS    900UL
 #define TOUCH_MENU_TIMEOUT_MS 15000UL
+// Two taps inside this window step the app menu backwards. Deliberately short:
+// scanning a menu forward is the common case and lands around half a second
+// apart, so the window has to stay under that or ordinary tapping would reverse.
+#define TOUCH_DOUBLE_TAP_MS     300UL
+// No real touch lasts this long, so a press still held after it means the
+// baseline has wandered away from the true untouched reading and the button is
+// latched. Adopting the current reading is the only way back without a reboot.
+#define TOUCH_STUCK_RESET_MS  10000UL
+// The Settings card is opened to be read and typed into a browser, so it stays up
+// far longer than the menu — but it still leaves on its own, because a permanent
+// address on screen would quietly displace whichever app the device was showing.
+#define SETTINGS_SCREEN_TIMEOUT_MS 60000UL
+
+// Inbound-stall budget for a manual OTA upload. WebServer's default is 5 s, which
+// is fine for a LAN burst and far too short for a 1.6 MB image over a weak link:
+// the radio can stall for seconds at a time and the transfer is aborted while it
+// is still perfectly alive. Only the upload raises it, so ordinary requests keep
+// failing fast.
+#define OTA_UPLOAD_TIMEOUT_MS 30000UL
 
 #define TFT_WIDTH  240
 #define TFT_HEIGHT 240

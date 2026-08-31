@@ -6,11 +6,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from geekmagic_hub import hook as hook_module
 from geekmagic_hub.hook import (
     ACTIVITY_THROTTLE_SEC,
     STAMP_TTL_SEC,
     claim_activity_slot,
     main,
+    spool_event,
 )
 
 
@@ -85,6 +87,46 @@ class HookThrottleTests(unittest.TestCase):
             self.assertEqual(
                 self.spooled_events(spool), ["UserPromptSubmit", "Stop", "SessionEnd"]
             )
+
+
+class SpoolSizeTests(unittest.TestCase):
+    """The spool is only drained when the server starts, so with the bridge
+    stopped it grows for as long as agents keep running. It lives in a cache
+    directory, so it has to bound itself."""
+
+    def setUp(self):
+        self._original = hook_module.SPOOL_MAX_BYTES
+        hook_module.SPOOL_MAX_BYTES = 2000   # keep the test fast; the logic is size-agnostic
+        self.addCleanup(setattr, hook_module, "SPOOL_MAX_BYTES", self._original)
+
+    @staticmethod
+    def _write(spool, name):
+        spool_event(spool, {"source": "claude", "payload": {"session_id": name, "pad": "x" * 60}})
+
+    def test_the_spool_stops_growing_once_it_is_full(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            spool = Path(tmp) / "pending.jsonl"
+            for index in range(500):
+                self._write(spool, f"s{index}")
+            # Trimming halves the file, so the steady state sits under twice the cap.
+            self.assertLessEqual(spool.stat().st_size, hook_module.SPOOL_MAX_BYTES * 2)
+
+    def test_the_newest_events_are_the_ones_kept(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            spool = Path(tmp) / "pending.jsonl"
+            for index in range(500):
+                self._write(spool, f"s{index}")
+            self._write(spool, "newest")
+            text = spool.read_text(encoding="utf-8")
+            self.assertIn('"newest"', text)
+            self.assertNotIn('"s0"', text)
+
+    def test_a_small_spool_is_left_alone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            spool = Path(tmp) / "pending.jsonl"
+            for index in range(5):
+                self._write(spool, f"s{index}")
+            self.assertEqual(len(spool.read_text(encoding="utf-8").splitlines()), 5)
 
 
 if __name__ == "__main__":

@@ -10,6 +10,13 @@ constexpr uint8_t  kCalibrationReads = 24;
 
 uint32_t g_raw = 0;
 uint32_t g_baseline = 0;
+// The baseline in 1/64 counts. The obvious integer form,
+// `baseline = (baseline * 63 + raw) / 64`, is a one-way ratchet: reaching
+// baseline+1 needs raw >= baseline + 64, which the tracking gate below forbids,
+// so it can only ever move DOWN — a full count per sample, 64x faster than the
+// intended time constant. Carrying the fraction makes both directions move at
+// the rate the filter is supposed to have.
+uint64_t g_baselineQ6 = 0;
 uint32_t g_triggerDelta = 0;
 uint32_t g_releaseDelta = 0;
 uint32_t g_lastSampleMs = 0;
@@ -27,6 +34,11 @@ uint32_t deltaFromBaseline(uint32_t value) {
 uint32_t percentWithFloor(uint32_t value, uint8_t percent, uint32_t floorValue) {
   uint32_t scaled = (uint32_t)(((uint64_t)value * percent) / 100U);
   return scaled > floorValue ? scaled : floorValue;
+}
+
+void setBaseline(uint32_t value) {
+  g_baseline = value ? value : 1;
+  g_baselineQ6 = (uint64_t)g_baseline << 6;
 }
 
 void updateThresholds() {
@@ -53,7 +65,7 @@ void touchButtonBegin() {
     }
     delay(8);
   }
-  g_baseline = count ? (uint32_t)(total / count) : 1;
+  setBaseline(count ? (uint32_t)(total / count) : 1);
   g_raw = g_baseline;
   updateThresholds();
   g_lastSampleMs = millis();
@@ -94,10 +106,29 @@ TouchButtonEvent touchButtonPoll() {
     return TOUCH_EVENT_LONG;
   }
 
+  // Self-heal a latched button. Release needs the reading back inside the
+  // release band, so a baseline that has drifted outside it can never let go on
+  // its own: the button then reads as permanently held and every tap is lost.
+  // A press this long is not a finger, so take the reading in front of us as
+  // the new rest state.
+  if (g_pressed && now - g_pressedMs >= TOUCH_STUCK_RESET_MS) {
+    setBaseline(g_raw);
+    updateThresholds();
+    g_pressed = false;
+    g_candidate = false;
+    g_longSent = false;
+    g_candidateMs = now;
+    g_lastEvent = "stuck-reset";
+    return TOUCH_EVENT_NONE;
+  }
+
   // Follow slow temperature/humidity drift only while confidently untouched.
   // Updating by 1/64 per sample is deliberately too slow to swallow a tap.
   if (!g_pressed && !g_candidate && delta < g_releaseDelta) {
-    g_baseline = (uint32_t)(((uint64_t)g_baseline * 63U + g_raw) / 64U);
+    const int64_t target = (int64_t)g_raw << 6;
+    g_baselineQ6 = (uint64_t)((int64_t)g_baselineQ6 + (target - (int64_t)g_baselineQ6) / 64);
+    g_baseline = (uint32_t)(g_baselineQ6 >> 6);
+    if (!g_baseline) g_baseline = 1;
     updateThresholds();
   }
   return TOUCH_EVENT_NONE;

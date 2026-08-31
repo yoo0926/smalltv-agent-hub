@@ -47,7 +47,15 @@ The top capacitive button is intentionally limited to a few predictable actions:
 - Tap while a full-screen notification is visible to dismiss it.
 - Hold for about one second to open the app menu.
 - In the menu, tap to move to the next app and hold to select it.
+- Two quick taps (within 300 ms) move back one row instead. The first tap has
+  already stepped forward by then, so you see it pass through the row it
+  skipped; waiting to tell the two apart would put that delay on every tap.
 - Leave the menu untouched for 15 seconds to cancel without changing apps.
+- The menu's last row is **Settings**, which is a card rather than an app: it
+  shows the address to open in a browser, the network that address came from,
+  and the running firmware. Tap to leave it, hold to go back to the menu, or
+  leave it for 60 seconds. It never becomes the boot app and never joins the
+  carousel, and an incoming alert takes the screen back from it.
 
 The selected app is saved and survives a reboot. Touch readings are calibrated
 at boot and reported under `touch` in `GET /api/status` for diagnostics.
