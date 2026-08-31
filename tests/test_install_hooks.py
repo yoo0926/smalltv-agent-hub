@@ -2,6 +2,7 @@ import json
 import unittest
 
 from scripts.install_hooks import (
+    CLAUDE_EVENTS,
     add_claude_hooks,
     merge_claude_hooks,
     parse_notify,
@@ -14,7 +15,7 @@ class InstallHookTests(unittest.TestCase):
     def test_claude_merge_is_idempotent(self):
         settings = {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "existing"}]}]}}
         added = add_claude_hooks(settings, "/tmp/desk-hub-event claude")
-        self.assertEqual(added, 9)
+        self.assertEqual(added, len(CLAUDE_EVENTS))
         self.assertEqual(add_claude_hooks(settings, "/tmp/desk-hub-event claude"), 0)
         commands = [hook["command"] for group in settings["hooks"]["Stop"] for hook in group["hooks"]]
         self.assertEqual(commands, ["existing", "/tmp/desk-hub-event claude"])
@@ -37,11 +38,19 @@ class InstallHookTests(unittest.TestCase):
         added, updated = merge_claude_hooks(
             settings, "/new/clone/bin/desk-hub-event claude"
         )
-        self.assertEqual((added, updated), (8, 1))
+        self.assertEqual((added, updated), (len(CLAUDE_EVENTS) - 1, 1))
         self.assertEqual(
             settings["hooks"]["Stop"][0]["hooks"][0]["command"],
             "/new/clone/bin/desk-hub-event claude",
         )
+
+    def test_nothing_is_hooked_on_every_tool_call(self):
+        # A per-tool-call hook adds roughly 80 ms of agent latency every time it
+        # runs, so the installed set stays on lifecycle events only.
+        settings = {}
+        merge_claude_hooks(settings, "/tmp/desk-hub-event claude")
+        self.assertNotIn("PostToolUse", settings["hooks"])
+        self.assertNotIn("PreToolUse", settings["hooks"])
 
     def test_codex_notify_is_parsed_and_replaced(self):
         original = 'notify = ["old-notifier", "turn-ended"]\nmodel = "example"\n'
@@ -50,6 +59,30 @@ class InstallHookTests(unittest.TestCase):
         updated = replace_notify(original, ["desk-hub-event", "codex"])
         self.assertIn('notify = ["desk-hub-event", "codex"]', updated)
         self.assertIn('model = "example"', updated)
+
+    def test_codex_multiline_notify_is_parsed_and_replaced(self):
+        original = (
+            'model = "example"\n'
+            "notify = [\n"
+            '    "/Applications/Other.app/Contents/MacOS/Other",\n'
+            '    "turn-ended",\n'
+            "]\n"
+            'service_tier = "priority"\n'
+        )
+        argv, _ = parse_notify(original)
+        self.assertEqual(
+            argv, ["/Applications/Other.app/Contents/MacOS/Other", "turn-ended"]
+        )
+        updated = replace_notify(original, ["desk-hub-event", "codex"])
+        self.assertEqual(updated.count("notify ="), 1)
+        self.assertIn('notify = ["desk-hub-event", "codex"]', updated)
+        self.assertIn('service_tier = "priority"', updated)
+        self.assertNotIn("turn-ended", updated)
+
+    def test_codex_unparseable_notify_is_never_duplicated(self):
+        original = 'notify = "not-an-array"\nmodel = "example"\n'
+        with self.assertRaises(ValueError):
+            replace_notify(original, ["desk-hub-event", "codex"])
 
     def test_codex_notify_is_added_when_missing(self):
         updated = replace_notify('model = "example"\n', ["desk-hub-event", "codex"])

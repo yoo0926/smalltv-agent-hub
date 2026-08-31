@@ -5,12 +5,53 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.error import URLError
-from urllib.request import Request, urlopen
+
+from .events import ACTIVITY_EVENTS
+
+
+ACTIVITY_THROTTLE_SEC = 10.0
+STAMP_TTL_SEC = 3600.0
+
+
+def claim_activity_slot(stamp_path: Path, now: float, interval: float = ACTIVITY_THROTTLE_SEC) -> bool:
+    """Report whether this activity event may be sent, and record that it was.
+
+    A tool event fires far more often than the display can use, so one per
+    session per interval is enough to keep a working session looking busy.
+    """
+    try:
+        if now - stamp_path.stat().st_mtime < interval:
+            return False
+    except OSError:
+        pass
+    try:
+        stamp_path.parent.mkdir(parents=True, exist_ok=True)
+        stamp_path.touch()
+        os.utime(stamp_path, (now, now))
+        _forget_dead_sessions(stamp_path.parent, now)
+    except OSError:
+        # Hooks must never break the coding agent. Losing the throttle is
+        # cheaper than losing the event.
+        return True
+    return True
+
+
+def _forget_dead_sessions(stamp_dir: Path, now: float) -> None:
+    for stamp in stamp_dir.glob("activity-*.stamp"):
+        try:
+            if now - stamp.stat().st_mtime > STAMP_TTL_SEC:
+                stamp.unlink()
+        except OSError:
+            continue
+
+
+def activity_stamp_path(spool_path: Path, source: str, session_id: str) -> Path:
+    safe = "".join(char if char.isalnum() or char in "-_" else "-" for char in session_id) or "unknown"
+    return spool_path.parent / f"activity-{source}-{safe}.stamp"
 
 
 def default_spool_path() -> Path:
@@ -21,6 +62,10 @@ def default_spool_path() -> Path:
 
 
 def post_event(url: str, token: str, envelope: Dict[str, Any], timeout: float = 0.8) -> bool:
+    # urllib costs about half this process's start-up, and a throttled tool
+    # event never gets here, so it is imported only when something is sent.
+    from urllib.request import Request, urlopen
+
     body = json.dumps(envelope, ensure_ascii=False).encode("utf-8")
     headers = {"Content-Type": "application/json"}
     if token:
@@ -29,7 +74,7 @@ def post_event(url: str, token: str, envelope: Dict[str, Any], timeout: float = 
     try:
         with urlopen(request, timeout=timeout) as response:
             return 200 <= response.status < 300
-    except (OSError, URLError):
+    except OSError:
         return False
 
 
@@ -80,6 +125,8 @@ def load_forward_argv(path: Optional[str]) -> List[str]:
 def forward_codex(argv: List[str], raw_payload: str) -> None:
     if not argv:
         return
+    import subprocess
+
     try:
         subprocess.run(
             [*argv, raw_payload],
@@ -121,6 +168,12 @@ def main(argv: Optional[list] = None) -> int:
         is_local_conductor = os.environ.get("CONDUCTOR_IS_LOCAL") == "1"
         if not is_local_conductor and not args.allow_non_conductor:
             return 0
+        if args.source == "claude" and payload.get("hook_event_name") in ACTIVITY_EVENTS:
+            stamp = activity_stamp_path(
+                Path(args.spool).expanduser(), args.source, str(payload.get("session_id") or "")
+            )
+            if not claim_activity_slot(stamp, time.time()):
+                return 0
         payload = dict(payload)
         payload["_desk_hub_conductor"] = {
             "is_local": os.environ.get("CONDUCTOR_IS_LOCAL", ""),

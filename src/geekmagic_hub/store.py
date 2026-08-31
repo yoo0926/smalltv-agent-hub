@@ -10,7 +10,18 @@ from collections import deque
 from pathlib import Path
 from typing import Any, Deque, Dict, List
 
-from .events import normalize_event, utc_now
+from .events import ACTIVITY_EVENTS, normalize_event, utc_now
+
+# Conductor cycles through session ids quickly, so tracked sessions are capped
+# as a backstop even when the per-workspace pruning below cannot apply.
+MAX_TRACKED_SESSIONS = 200
+
+# A session in one of these states may still produce work and is never pruned.
+LIVE_STATES = frozenset({"working", "needs_input"})
+
+
+def _workspace_key(agent: Dict[str, Any]) -> str:
+    return str(agent.get("workspace_path") or agent.get("workspace") or "")
 
 
 class StateStore:
@@ -63,6 +74,10 @@ class StateStore:
         with self._lock:
             previous = self._agents.get(key, {})
             state = event["state"] or previous.get("state") or "idle"
+            if event["event"] in ACTIVITY_EVENTS and previous.get("last_event") == "SessionEnd":
+                # Hooks are separate processes, so a tool event can land after
+                # the session already closed. A closed session stays closed.
+                state = previous.get("state") or "idle"
             agent = {
                 **previous,
                 "source": event["source"],
@@ -81,9 +96,42 @@ class StateStore:
                 "updated_at": event["received_at"],
             }
             self._agents[key] = agent
+            self._prune_replaced_sessions(key, agent)
+            self._enforce_session_cap()
             self._events.append(event)
             self._persist()
             return agent
+
+    def _prune_replaced_sessions(self, key: str, agent: Dict[str, Any]) -> None:
+        """Drop finished sessions that a newer one in the same workspace replaced.
+
+        Conductor starts a fresh session id whenever a chat restarts, so without
+        this the same workspace accumulates rows forever and stale ``done`` ones
+        keep speaking for a workspace that has moved on. Sources are kept apart
+        so a new Claude session never hides what Codex just did.
+        """
+        workspace = _workspace_key(agent)
+        updated_at = str(agent.get("updated_at") or "")
+        for other_key, other in list(self._agents.items()):
+            if other_key == key or other.get("state") in LIVE_STATES:
+                continue
+            if other.get("source") != agent.get("source"):
+                continue
+            if _workspace_key(other) != workspace:
+                continue
+            if str(other.get("updated_at") or "") <= updated_at:
+                del self._agents[other_key]
+
+    def _enforce_session_cap(self) -> None:
+        excess = len(self._agents) - MAX_TRACKED_SESSIONS
+        if excess <= 0:
+            return
+        oldest_first = sorted(
+            (k for k, v in self._agents.items() if v.get("state") not in LIVE_STATES),
+            key=lambda k: str(self._agents[k].get("updated_at") or ""),
+        )
+        for key in oldest_first[:excess]:
+            del self._agents[key]
 
     def snapshot(self) -> Dict[str, Any]:
         with self._lock:

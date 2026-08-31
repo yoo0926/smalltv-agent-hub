@@ -5,6 +5,31 @@ All notable user-visible changes are recorded here. The project follows
 
 ## Unreleased
 
+- Fixed two workspaces whose branches share a long prefix rendering as the
+  same name. Labels now lose their middle rather than their tail, and the
+  bridge spends the same per-layout budget the firmware does, so the display no
+  longer shortens a second time from the front.
+- Fixed a workspace renamed after its session started showing its old
+  creation-time codename on the display. Conductor freezes
+  `CONDUCTOR_WORKSPACE_NAME` into the session process at launch, so rows are
+  now named after the git branch, which is re-read on every event. The
+  branch's type prefix is dropped, and `main`/`master` yields to the
+  workspace name. Branch names are therefore visible on the display.
+- Fixed the display showing one row per session, which repeated a workspace
+  whenever Claude restarted under a new session id or Codex ran beside it. Rows
+  are now one per workspace, and the session that most needs attention speaks
+  for it.
+- Fixed a finished session claiming a workspace was done while another session
+  in it was still running, both on the dashboard and as a full-screen alert.
+- Stopped the state file from growing without bound by dropping finished
+  sessions that a newer one in the same workspace replaced. Sessions that are
+  still working or waiting are never dropped.
+- Shortened how long finished work stays on the display from thirty minutes to
+  ten, so it no longer holds one of the four rows for so long.
+- Fixed interactive setup corrupting `~/.codex/config.toml` when the existing
+  `notify` command spanned several lines. Setup could leave two top-level
+  `notify` keys, which made Codex fail to start; it now refuses to write rather
+  than duplicate a key it cannot parse.
 - Split fresh-Mac onboarding into a repository-local build and an interactive
   setup command with Git-ignored, reusable `.env` defaults.
 - Added reproducible macOS bootstrap, pinned firmware dependencies, root CI,

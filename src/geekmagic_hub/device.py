@@ -6,64 +6,169 @@ import json
 import threading
 from collections import deque
 from datetime import datetime, timedelta, timezone
-from typing import Any, Deque, Dict, Optional
+from typing import Any, Deque, Dict, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 
 
 MAX_DEVICE_AGENTS = 4
+# The alert screen centres one line of size-2 text across 240 px, which is the
+# firmware's NOTIFY_LABEL_MAX.
 MAX_DEVICE_LABEL = 20
-COMPLETED_VISIBLE_FOR = timedelta(minutes=30)
+# How many characters the Agent Hub layout leaves for a label, keyed by the
+# number of rows on screen. These mirror the compactLabel() budgets in the
+# firmware's AgentMode.cpp: a lone hero row is roomier than a pair of cards.
+# Spending the same budget here keeps the firmware from cutting a second time,
+# from the front, which would undo the shortening below.
+LAYOUT_LABEL_BUDGET = {1: 19, 2: 15, 3: 16, 4: 16}
+COMPLETED_VISIBLE_FOR = timedelta(minutes=10)
+
+# Which session speaks for a workspace: the ones asking for a human first, then
+# the ones still moving, and only then the ones that have finished.
+STATE_PRIORITY = {"done": 1, "working": 2, "failed": 3, "needs_input": 4}
+
+# States that mean the workspace has not wrapped up yet.
+LIVE_STATES = frozenset({"working", "needs_input"})
+
+# Branch names shared by every workspace of a repository, so they identify none
+# of them.
+GENERIC_BRANCHES = frozenset({"main", "master"})
 
 
-def _ascii_label(value: Any, fallback: str = "agent") -> str:
+def _workspace_key(agent: Dict[str, Any]) -> str:
+    return str(agent.get("workspace_path") or agent.get("workspace") or "")
+
+
+def _workspace_still_busy(agent: Dict[str, Any], snapshot: Dict[str, Any]) -> bool:
+    """Whether any session in the same workspace is still live.
+
+    Only asked about a session that just finished, so the session itself can
+    never be the one that answers yes.
+    """
+    workspace = _workspace_key(agent)
+    return any(
+        _workspace_key(other) == workspace and str(other.get("state") or "") in LIVE_STATES
+        for other in snapshot.get("agents", [])
+    )
+
+
+def _shorten(text: str, budget: int) -> str:
+    """Drop the middle of an over-long label instead of its tail.
+
+    A branch is identified by its front and told apart from its siblings by its
+    back, so ``verify-local-agent-hub-status`` and its ``-v1`` variant have to
+    keep both ends to stay distinct in fifteen columns. The odd character goes
+    to the front, which carries more meaning. The gap is two ASCII dots because
+    the firmware font has no ellipsis glyph.
+    """
+    if len(text) <= budget:
+        return text
+    if budget <= 2:
+        return text[:budget]
+    keep = budget - 2
+    head = (keep + 1) // 2
+    return text[:head] + ".." + text[len(text) - (keep - head) :]
+
+
+def _ascii_label(value: Any, fallback: str = "agent", budget: int = MAX_DEVICE_LABEL) -> str:
     text = "".join(char for char in str(value or "") if " " <= char <= "~")
     text = " ".join(text.split())
-    return (text or fallback)[:MAX_DEVICE_LABEL]
+    return _shorten(text or fallback, budget)
 
 
-def dashboard_payload(snapshot: Dict[str, Any]) -> Dict[str, Any]:
-    rows = []
-    now = datetime.now(timezone.utc)
+def _branch_label(agent: Dict[str, Any]) -> str:
+    """The branch, minus the conventional type prefix.
+
+    Conductor names a workspace after its branch with that prefix dropped, so
+    ``fix/public-error-user-agent`` becomes ``public-error-user-agent``. Match
+    that, because the prefix is noise in twenty columns. A branch that names no
+    particular work says less than the workspace does, so it yields.
+    """
+    branch = str(agent.get("branch") or "").rsplit("/", 1)[-1]
+    return "" if branch in GENERIC_BRANCHES else branch
+
+
+def _display_label(agent: Dict[str, Any], budget: int = MAX_DEVICE_LABEL) -> str:
+    """Name a workspace by its branch, falling back to the Conductor name.
+
+    ``CONDUCTOR_WORKSPACE_NAME`` is frozen into the agent process environment at
+    launch, so a workspace renamed afterwards keeps announcing the codename it
+    was created with until a new session replaces it. The branch is re-read from
+    git on every event, so it stays current.
+    """
+    return _ascii_label(
+        _branch_label(agent) or agent.get("workspace"), agent.get("agent") or "agent", budget
+    )
+
+
+def _is_stale(item: Dict[str, Any], now: datetime) -> bool:
+    try:
+        updated = datetime.fromisoformat(str(item.get("updated_at") or "").replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if updated.tzinfo is None:
+        updated = updated.replace(tzinfo=timezone.utc)
+    return now - updated > COMPLETED_VISIBLE_FOR
+
+
+def dashboard_payload(snapshot: Dict[str, Any], now: Optional[datetime] = None) -> Dict[str, Any]:
+    now = now or datetime.now(timezone.utc)
+    # A Conductor workspace can hold several sessions at once: Claude restarts
+    # under a fresh session id, and Codex runs beside it. The display shows the
+    # workspace, so the session that most deserves attention speaks for it.
+    groups: Dict[str, Dict[str, Any]] = {}
+    order: List[str] = []
     for item in snapshot.get("agents", []):
         state = str(item.get("state") or "idle")
         if state == "idle":
             continue
-        if state in {"done", "failed"}:
-            try:
-                updated = datetime.fromisoformat(str(item.get("updated_at") or "").replace("Z", "+00:00"))
-            except ValueError:
-                updated = now
-            if updated.tzinfo is None:
-                updated = updated.replace(tzinfo=timezone.utc)
-            if now - updated > COMPLETED_VISIBLE_FOR:
-                continue
-        rows.append(
+        if state in {"done", "failed"} and _is_stale(item, now):
+            continue
+        key = _workspace_key(item)
+        current = groups.get(key)
+        if current is None:
+            groups[key] = item
+            order.append(key)
+        elif STATE_PRIORITY.get(state, 0) > STATE_PRIORITY.get(str(current.get("state") or ""), 0):
+            groups[key] = item
+    # How much room a label gets depends on the layout the firmware picks, and
+    # that depends on how many rows survive the grouping. So labels are only
+    # written once the final row count is known.
+    shown = [groups[key] for key in order[:MAX_DEVICE_AGENTS]]
+    budget = LAYOUT_LABEL_BUDGET.get(len(shown), MAX_DEVICE_LABEL)
+    return {
+        "agents": [
             {
-                "label": _ascii_label(item.get("workspace"), item.get("agent") or "agent"),
+                "label": _display_label(item, budget),
                 "agent": _ascii_label(item.get("agent"), "agent")[:8].lower(),
-                "state": state,
+                "state": str(item.get("state") or "idle"),
             }
-        )
-        if len(rows) >= MAX_DEVICE_AGENTS:
-            break
-    return {"agents": rows}
+            for item in shown
+        ]
+    }
 
 
-def alert_payload(agent: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def alert_payload(
+    agent: Optional[Dict[str, Any]], snapshot: Optional[Dict[str, Any]] = None
+) -> Optional[Dict[str, Any]]:
     if not agent:
         return None
     state = str(agent.get("state") or "")
     if state == "done":
+        # One agent finishing does not mean the workspace is done. Claiming so
+        # is what puts a full-screen DONE over work that is still running.
+        if snapshot and _workspace_still_busy(agent, snapshot):
+            return None
         notify_state = "done"
     elif state in {"needs_input", "failed"}:
         notify_state = "waiting"
     else:
         return None
-    label = _ascii_label(agent.get("workspace"), agent.get("agent") or "agent")
-    if state == "failed":
-        label = _ascii_label("FAIL " + label)
+    # "FAIL " spends five of the alert screen's twenty columns, so the name it
+    # introduces is shortened to what is left rather than cut off the end.
+    prefix = "FAIL " if state == "failed" else ""
+    label = prefix + _display_label(agent, MAX_DEVICE_LABEL - len(prefix))
     return {"state": notify_state, "ttl": 20, "label": label}
 
 
@@ -85,7 +190,7 @@ class DeviceNotifier:
         self._thread.start()
 
     def publish(self, snapshot: Dict[str, Any], changed_agent: Optional[Dict[str, Any]] = None) -> None:
-        alert = alert_payload(changed_agent)
+        alert = alert_payload(changed_agent, snapshot)
         with self._condition:
             self._latest = dashboard_payload(snapshot)
             self._dirty = True

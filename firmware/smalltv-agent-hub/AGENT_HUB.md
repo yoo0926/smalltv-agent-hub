@@ -18,11 +18,15 @@ Supported states are `working`, `needs_input`, `done`, `failed`, and `idle`.
 Only printable short labels are retained; prompts and responses are not part of
 the protocol.
 
-The dashboard adapts to the number of visible sessions. One session gets a
-full-screen hero layout with a large project name and state, two sessions use
-two large cards, and three or four sessions use compact rows while keeping the
-project and state at text size 2. Long labels are shortened instead of being
-shrunk to the least-readable font size.
+Each row is one workspace rather than one session. The Mac bridge merges the
+sessions running in a workspace before pushing, so a Claude restart or a Codex
+run alongside it never sends the same project twice.
+
+The dashboard adapts to the number of visible rows. One row gets a full-screen
+hero layout with a large project name and state, two rows use two large cards,
+and three or four rows use compact rows while keeping the project and state at
+text size 2. Long labels are shortened instead of being shrunk to the
+least-readable font size.
 
 Use the transient full-screen overlay for attention events:
 

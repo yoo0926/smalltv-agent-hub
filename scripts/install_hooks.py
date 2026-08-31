@@ -26,6 +26,14 @@ CLAUDE_EVENTS = (
     "SessionEnd",
 )
 
+# Deliberately absent: "PostToolUse". The bridge understands it (see
+# geekmagic_hub.events.ACTIVITY_EVENTS) and the hook adapter throttles it to one
+# send per session per ten seconds, which returns a session to "working" when it
+# resumes without a new prompt -- after a permission grant, for example. It is
+# not installed because the hook process starts on every single tool call and
+# costs about 80 ms each time, whether or not the throttle lets the event
+# through. Add it back here if a stale "done" or "needs_input" row is worth that.
+
 
 def load_json(path: Path) -> Dict[str, Any]:
     if not path.exists():
@@ -90,8 +98,14 @@ def add_claude_hooks(settings: Dict[str, Any], command: str) -> int:
     return added
 
 
+NOTIFY_KEY = re.compile(r"(?m)^notify\s*=")
+NOTIFY_ASSIGNMENT = re.compile(r"(?ms)^notify\s*=\s*(\[.*?\])[^\S\n]*$")
+
+
 def parse_notify(config: str) -> Tuple[Optional[List[str]], Optional[re.Match]]:
-    match = re.search(r"(?m)^notify\s*=\s*(\[[^\n]*\])\s*$", config)
+    # The array may span several lines, so the closing bracket is matched
+    # lazily instead of being pinned to the line that opens it.
+    match = NOTIFY_ASSIGNMENT.search(config)
     if not match:
         return None, None
     raw = match.group(1)
@@ -109,6 +123,10 @@ def replace_notify(config: str, argv: List[str]) -> str:
     _, match = parse_notify(config)
     if match:
         return config[: match.start()] + line + config[match.end() :]
+    if NOTIFY_KEY.search(config):
+        # Prepending here would leave two top-level ``notify`` keys, which makes
+        # the whole Codex config unparseable.
+        raise ValueError("Codex notify exists but could not be parsed; refusing to duplicate it")
     return line + "\n" + config
 
 
