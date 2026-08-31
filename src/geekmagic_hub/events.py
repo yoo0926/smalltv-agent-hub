@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -25,6 +24,10 @@ def _text(value: Any, limit: int = 240) -> str:
 def _git_value(cwd: str, *args: str) -> str:
     if not cwd or not Path(cwd).is_dir():
         return ""
+    # Imported here so the hook process, which reads this module only for
+    # ACTIVITY_EVENTS, does not pay for subprocess on every tool call.
+    import subprocess
+
     try:
         result = subprocess.run(
             ["git", "-C", cwd, *args],
@@ -57,10 +60,16 @@ def _workspace_context(cwd: str, payload: Dict[str, Any]) -> Dict[str, str]:
     }
 
 
+# Events that only prove a session is still moving. Stop fires at the end of
+# every turn, but a session can resume without a new prompt, so these bring a
+# finished session back to "working".
+ACTIVITY_EVENTS = frozenset({"PostToolUse"})
+
+
 def _claude_state(event: str, payload: Dict[str, Any]) -> Optional[str]:
     if event in {"SessionStart"}:
         return "idle"
-    if event in {"UserPromptSubmit", "SubagentStart", "TaskCreated"}:
+    if event in ACTIVITY_EVENTS or event in {"UserPromptSubmit", "SubagentStart", "TaskCreated"}:
         return "working"
     if event == "Stop":
         return "done"
@@ -84,7 +93,7 @@ def _claude_state(event: str, payload: Dict[str, Any]) -> Optional[str]:
 
 
 def _claude_message(event: str, payload: Dict[str, Any]) -> str:
-    if event == "UserPromptSubmit":
+    if event == "UserPromptSubmit" or event in ACTIVITY_EVENTS:
         return "Working"
     if event == "Stop":
         return "Turn complete"

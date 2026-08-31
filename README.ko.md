@@ -16,6 +16,8 @@ Claude Code와 Codex를 실행하는 Conductor 세션을 위한 로컬 전용 �
 - Claude Code 상태: `working`, `needs_input`, `done`, `failed`, `idle`
 - Codex의 공식 외부 `agent-turn-complete` 알림에 대한 `done` 상태
 - 훅의 `cwd`와 Git 브랜치를 이용한 Conductor 워크스페이스 표시
+- 세션이 아니라 워크스페이스 단위로 한 행 표시. Claude를 다시 시작하거나
+  Codex를 함께 돌려도 같은 저장소가 두 행으로 갈라지지 않습니다
 - 기존 Codex `notify` 명령을 덮어쓰지 않고 연쇄 실행
 - `CONDUCTOR_IS_LOCAL=1`을 이용한 로컬 Conductor 세션 전용 필터링
 - 개인정보를 최소화한 오프라인 큐와 브리지 시작 시 자동 재전송
@@ -36,7 +38,21 @@ Claude Code와 Codex를 실행하는 Conductor 세션을 위한 로컬 전용 �
 
 `TaskCompleted`는 하위 작업이나 팀원의 작업 완료를 의미할 수 있으므로
 Claude 주 세션의 종료가 아니라 진행 상태로 처리합니다. Claude의 `Stop`
-훅을 한 차례 작업 완료를 판단하는 기준 이벤트로 사용합니다.
+훅을 한 차례 작업 완료를 판단하는 기준 이벤트로 사용하며, 세션을 완전히
+닫는 이벤트는 `SessionEnd`뿐입니다.
+
+`Stop`은 세션이 아니라 한 차례 작업의 끝을 뜻합니다. 그래서 권한 승인처럼
+새 프롬프트 없이 작업이 재개되면 다음 턴이 끝날 때까지 직전 상태가 그대로
+남습니다. 빈도를 제한한 `PostToolUse` 훅으로 이 구간을 메울 수 있고 구현도
+되어 있지만 기본 설치하지 않습니다. 훅 프로세스가 도구 호출마다 시작되어
+매번 약 80ms가 들기 때문입니다. 켜는 방법은
+[`scripts/install_hooks.py`](scripts/install_hooks.py)의 `CLAUDE_EVENTS` 위
+주석을 참고하세요.
+
+화면에서 워크스페이스는 하나의 상태로 말합니다. 그 안의 세션 중
+`needs_input`이 `failed`보다, `failed`가 `working`보다, `working`이 `done`보다
+우선합니다. 따라서 같은 워크스페이스에서 다른 세션이 아직 돌고 있으면
+`done` 알림을 띄우지 않고, 끝난 작업은 10분 뒤 화면에서 사라집니다.
 
 프롬프트와 응답 내용은 상태 파일이나 오프라인 큐에 저장하지 않습니다.
 화면 API에는 `Working`, `Permission required`, `Turn complete` 같은 짧은

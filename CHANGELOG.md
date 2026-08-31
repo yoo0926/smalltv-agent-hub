@@ -5,6 +5,17 @@ All notable user-visible changes are recorded here. The project follows
 
 ## Unreleased
 
+- Fixed the display showing one row per session, which repeated a workspace
+  whenever Claude restarted under a new session id or Codex ran beside it. Rows
+  are now one per workspace, and the session that most needs attention speaks
+  for it.
+- Fixed a finished session claiming a workspace was done while another session
+  in it was still running, both on the dashboard and as a full-screen alert.
+- Stopped the state file from growing without bound by dropping finished
+  sessions that a newer one in the same workspace replaced. Sessions that are
+  still working or waiting are never dropped.
+- Shortened how long finished work stays on the display from thirty minutes to
+  ten, so it no longer holds one of the four rows for so long.
 - Fixed interactive setup corrupting `~/.codex/config.toml` when the existing
   `notify` command spanned several lines. Setup could leave two top-level
   `notify` keys, which made Codex fail to start; it now refuses to write rather

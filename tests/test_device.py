@@ -1,6 +1,11 @@
 import unittest
+from datetime import datetime, timedelta
 
 from geekmagic_hub.device import alert_payload, dashboard_payload
+
+# The dashboard hides finished work after a while, so the tests pin "now"
+# instead of racing the wall clock.
+NOW = datetime.fromisoformat("2026-08-31T01:30:00+00:00")
 
 
 class DevicePayloadTests(unittest.TestCase):
@@ -31,6 +36,98 @@ class DevicePayloadTests(unittest.TestCase):
             {"agents": [{"workspace": "old", "agent": "claude", "state": "idle"}]}
         )
         self.assertEqual(payload, {"agents": []})
+
+    def test_one_workspace_is_one_row_even_with_several_sessions(self):
+        snapshot = {
+            "agents": [
+                {
+                    "workspace": "datadog-oncall",
+                    "workspace_path": "/ws/datadog-oncall",
+                    "agent": "codex",
+                    "state": "done",
+                    "updated_at": "2026-08-31T01:27:19+00:00",
+                },
+                {
+                    "workspace": "datadog-oncall",
+                    "workspace_path": "/ws/datadog-oncall",
+                    "agent": "claude",
+                    "state": "working",
+                    "updated_at": "2026-08-31T01:26:50+00:00",
+                },
+            ]
+        }
+        payload = dashboard_payload(snapshot, now=NOW)
+        self.assertEqual(len(payload["agents"]), 1)
+        self.assertEqual(payload["agents"][0]["state"], "working")
+        self.assertEqual(payload["agents"][0]["label"], "datadog-oncall")
+        self.assertEqual(payload["agents"][0]["agent"], "claude")
+
+    def test_workspace_shows_the_session_that_most_needs_attention(self):
+        just_now = NOW.isoformat(timespec="seconds")
+
+        def row(agent, state):
+            return {
+                "workspace": "shared",
+                "workspace_path": "/ws/shared",
+                "agent": agent,
+                "state": state,
+                "updated_at": just_now,
+            }
+
+        def state_for(*sessions):
+            payload = dashboard_payload({"agents": [row(*s) for s in sessions]}, now=NOW)
+            return payload["agents"][0]["state"]
+
+        self.assertEqual(state_for(("claude", "working"), ("codex", "needs_input")), "needs_input")
+        self.assertEqual(state_for(("claude", "working"), ("codex", "failed")), "failed")
+        self.assertEqual(state_for(("claude", "failed"), ("codex", "needs_input")), "needs_input")
+
+    def test_separate_workspaces_stay_on_separate_rows(self):
+        payload = dashboard_payload(
+            {
+                "agents": [
+                    {"workspace": "hub", "workspace_path": "/ws/one", "agent": "claude", "state": "working"},
+                    {"workspace": "hub", "workspace_path": "/ws/two", "agent": "claude", "state": "working"},
+                ]
+            }
+        )
+        self.assertEqual(len(payload["agents"]), 2)
+
+    def test_finished_work_leaves_the_display_after_ten_minutes(self):
+        def rows_after(minutes):
+            finished = (NOW - timedelta(minutes=minutes)).isoformat(timespec="seconds")
+            snapshot = {
+                "agents": [
+                    {
+                        "workspace": "wrapped-up",
+                        "workspace_path": "/ws/wrapped-up",
+                        "agent": "claude",
+                        "state": "done",
+                        "updated_at": finished,
+                    }
+                ]
+            }
+            return dashboard_payload(snapshot, now=NOW)["agents"]
+
+        self.assertEqual(len(rows_after(9)), 1)
+        self.assertEqual(rows_after(11), [])
+
+    def test_no_done_alert_while_another_session_is_still_working(self):
+        working = {"workspace": "shared", "workspace_path": "/ws/shared", "agent": "claude", "state": "working"}
+        finished = {"workspace": "shared", "workspace_path": "/ws/shared", "agent": "codex", "state": "done"}
+        self.assertIsNone(alert_payload(finished, {"agents": [working, finished]}))
+
+    def test_done_alert_fires_once_the_workspace_is_finished(self):
+        idle = {"workspace": "shared", "workspace_path": "/ws/shared", "agent": "claude", "state": "idle"}
+        finished = {"workspace": "shared", "workspace_path": "/ws/shared", "agent": "codex", "state": "done"}
+        alert = alert_payload(finished, {"agents": [idle, finished]})
+        self.assertEqual(alert["state"], "done")
+
+    def test_attention_alerts_are_never_suppressed(self):
+        working = {"workspace": "shared", "workspace_path": "/ws/shared", "agent": "claude", "state": "working"}
+        for state in ("needs_input", "failed"):
+            stuck = {"workspace": "shared", "workspace_path": "/ws/shared", "agent": "codex", "state": state}
+            self.assertEqual(alert_payload(stuck, {"agents": [working, stuck]})["state"], "waiting")
 
     def test_alert_mapping(self):
         self.assertEqual(alert_payload({"workspace": "demo", "state": "done"})["state"], "done")

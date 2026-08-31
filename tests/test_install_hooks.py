@@ -2,6 +2,7 @@ import json
 import unittest
 
 from scripts.install_hooks import (
+    CLAUDE_EVENTS,
     add_claude_hooks,
     merge_claude_hooks,
     parse_notify,
@@ -14,7 +15,7 @@ class InstallHookTests(unittest.TestCase):
     def test_claude_merge_is_idempotent(self):
         settings = {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "existing"}]}]}}
         added = add_claude_hooks(settings, "/tmp/desk-hub-event claude")
-        self.assertEqual(added, 9)
+        self.assertEqual(added, len(CLAUDE_EVENTS))
         self.assertEqual(add_claude_hooks(settings, "/tmp/desk-hub-event claude"), 0)
         commands = [hook["command"] for group in settings["hooks"]["Stop"] for hook in group["hooks"]]
         self.assertEqual(commands, ["existing", "/tmp/desk-hub-event claude"])
@@ -37,11 +38,19 @@ class InstallHookTests(unittest.TestCase):
         added, updated = merge_claude_hooks(
             settings, "/new/clone/bin/desk-hub-event claude"
         )
-        self.assertEqual((added, updated), (8, 1))
+        self.assertEqual((added, updated), (len(CLAUDE_EVENTS) - 1, 1))
         self.assertEqual(
             settings["hooks"]["Stop"][0]["hooks"][0]["command"],
             "/new/clone/bin/desk-hub-event claude",
         )
+
+    def test_nothing_is_hooked_on_every_tool_call(self):
+        # A per-tool-call hook adds roughly 80 ms of agent latency every time it
+        # runs, so the installed set stays on lifecycle events only.
+        settings = {}
+        merge_claude_hooks(settings, "/tmp/desk-hub-event claude")
+        self.assertNotIn("PostToolUse", settings["hooks"])
+        self.assertNotIn("PreToolUse", settings["hooks"])
 
     def test_codex_notify_is_parsed_and_replaced(self):
         original = 'notify = ["old-notifier", "turn-ended"]\nmodel = "example"\n'

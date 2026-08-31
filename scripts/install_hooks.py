@@ -26,6 +26,14 @@ CLAUDE_EVENTS = (
     "SessionEnd",
 )
 
+# Deliberately absent: "PostToolUse". The bridge understands it (see
+# geekmagic_hub.events.ACTIVITY_EVENTS) and the hook adapter throttles it to one
+# send per session per ten seconds, which returns a session to "working" when it
+# resumes without a new prompt -- after a permission grant, for example. It is
+# not installed because the hook process starts on every single tool call and
+# costs about 80 ms each time, whether or not the throttle lets the event
+# through. Add it back here if a stale "done" or "needs_input" row is worth that.
+
 
 def load_json(path: Path) -> Dict[str, Any]:
     if not path.exists():

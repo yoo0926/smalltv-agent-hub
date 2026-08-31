@@ -62,6 +62,25 @@ class EventTests(unittest.TestCase):
             )
             self.assertEqual(store.snapshot()["agents"][0]["state"], "working")
 
+    def test_tool_activity_returns_a_finished_session_to_working(self):
+        # Claude reports Stop at the end of every turn, but a session can pick
+        # work back up without a new prompt, so tool activity has to revive it.
+        with tempfile.TemporaryDirectory() as directory:
+            store = StateStore(Path(directory))
+            store.apply("claude", {"session_id": "c4", "cwd": directory, "hook_event_name": "Stop"})
+            self.assertEqual(store.snapshot()["agents"][0]["state"], "done")
+            store.apply("claude", {"session_id": "c4", "cwd": directory, "hook_event_name": "PostToolUse"})
+            revived = store.snapshot()["agents"][0]
+            self.assertEqual(revived["state"], "working")
+            self.assertEqual(revived["message"], "Working")
+
+    def test_tool_activity_does_not_revive_a_closed_session(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = StateStore(Path(directory))
+            store.apply("claude", {"session_id": "c5", "cwd": directory, "hook_event_name": "SessionEnd"})
+            store.apply("claude", {"session_id": "c5", "cwd": directory, "hook_event_name": "PostToolUse"})
+            self.assertEqual(store.snapshot()["agents"][0]["state"], "idle")
+
     def test_codex_turn_complete(self):
         event = normalize_event(
             "codex",

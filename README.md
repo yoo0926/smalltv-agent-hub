@@ -11,6 +11,7 @@ Local-only status bridge for Conductor sessions running Claude Code and Codex. T
 - Claude Code: `working`, `needs_input`, `done`, `failed`, and `idle`
 - Codex: `done` for the officially supported external `agent-turn-complete` notification
 - Conductor workspace labeling from the hook's `cwd` plus the git branch
+- One row per workspace, not per session, so a Claude restart or a Codex run beside it never splits a repository across two rows
 - Existing Codex `notify` command chaining instead of replacing it
 - Local-Conductor-only filtering through `CONDUCTOR_IS_LOCAL=1`
 - Privacy-minimized offline queue with automatic replay on bridge startup
@@ -24,7 +25,11 @@ Local-only status bridge for Conductor sessions running Claude Code and Codex. T
 - Adaptive Agent Hub layout: a large hero view for one task, two large cards, or readable compact rows for three to four tasks
 - Visible success/error toast feedback after saving settings in the web dashboard
 
-`TaskCompleted` is treated as progress rather than ending the main Claude session, because it can refer to a subtask or teammate. The Claude `Stop` hook is the authoritative turn-complete event.
+`TaskCompleted` is treated as progress rather than ending the main Claude session, because it can refer to a subtask or teammate. The Claude `Stop` hook is the authoritative turn-complete event, and only `SessionEnd` closes a session for good.
+
+`Stop` ends a turn rather than the session, so a session that resumes without a new prompt — after a permission grant, for example — keeps showing its last state until the next turn ends. The bridge can close that gap with a throttled `PostToolUse` hook, which is implemented but not installed: the hook process starts on every tool call and costs roughly 80 ms each time. See the note above `CLAUDE_EVENTS` in [`scripts/install_hooks.py`](scripts/install_hooks.py) to turn it on.
+
+A workspace speaks with one voice on the display: among its sessions, `needs_input` outranks `failed`, which outranks `working`, which outranks `done`. A `done` alert is therefore suppressed while another session in the same workspace is still running, and finished work leaves the display after ten minutes.
 
 Prompts and assistant responses are not persisted in the state file or offline queue. The display API emits short lifecycle messages such as `Working`, `Permission required`, and `Turn complete`.
 

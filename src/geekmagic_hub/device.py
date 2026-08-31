@@ -6,7 +6,7 @@ import json
 import threading
 from collections import deque
 from datetime import datetime, timedelta, timezone
-from typing import Any, Deque, Dict, Optional
+from typing import Any, Deque, Dict, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
@@ -14,7 +14,31 @@ from urllib.request import Request, urlopen
 
 MAX_DEVICE_AGENTS = 4
 MAX_DEVICE_LABEL = 20
-COMPLETED_VISIBLE_FOR = timedelta(minutes=30)
+COMPLETED_VISIBLE_FOR = timedelta(minutes=10)
+
+# Which session speaks for a workspace: the ones asking for a human first, then
+# the ones still moving, and only then the ones that have finished.
+STATE_PRIORITY = {"done": 1, "working": 2, "failed": 3, "needs_input": 4}
+
+# States that mean the workspace has not wrapped up yet.
+LIVE_STATES = frozenset({"working", "needs_input"})
+
+
+def _workspace_key(agent: Dict[str, Any]) -> str:
+    return str(agent.get("workspace_path") or agent.get("workspace") or "")
+
+
+def _workspace_still_busy(agent: Dict[str, Any], snapshot: Dict[str, Any]) -> bool:
+    """Whether any session in the same workspace is still live.
+
+    Only asked about a session that just finished, so the session itself can
+    never be the one that answers yes.
+    """
+    workspace = _workspace_key(agent)
+    return any(
+        _workspace_key(other) == workspace and str(other.get("state") or "") in LIVE_STATES
+        for other in snapshot.get("agents", [])
+    )
 
 
 def _ascii_label(value: Any, fallback: str = "agent") -> str:
@@ -23,39 +47,55 @@ def _ascii_label(value: Any, fallback: str = "agent") -> str:
     return (text or fallback)[:MAX_DEVICE_LABEL]
 
 
-def dashboard_payload(snapshot: Dict[str, Any]) -> Dict[str, Any]:
-    rows = []
-    now = datetime.now(timezone.utc)
+def _is_stale(item: Dict[str, Any], now: datetime) -> bool:
+    try:
+        updated = datetime.fromisoformat(str(item.get("updated_at") or "").replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if updated.tzinfo is None:
+        updated = updated.replace(tzinfo=timezone.utc)
+    return now - updated > COMPLETED_VISIBLE_FOR
+
+
+def dashboard_payload(snapshot: Dict[str, Any], now: Optional[datetime] = None) -> Dict[str, Any]:
+    now = now or datetime.now(timezone.utc)
+    # A Conductor workspace can hold several sessions at once: Claude restarts
+    # under a fresh session id, and Codex runs beside it. The display shows the
+    # workspace, so the session that most deserves attention speaks for it.
+    groups: Dict[str, Dict[str, Any]] = {}
+    order: List[str] = []
     for item in snapshot.get("agents", []):
         state = str(item.get("state") or "idle")
         if state == "idle":
             continue
-        if state in {"done", "failed"}:
-            try:
-                updated = datetime.fromisoformat(str(item.get("updated_at") or "").replace("Z", "+00:00"))
-            except ValueError:
-                updated = now
-            if updated.tzinfo is None:
-                updated = updated.replace(tzinfo=timezone.utc)
-            if now - updated > COMPLETED_VISIBLE_FOR:
-                continue
-        rows.append(
-            {
-                "label": _ascii_label(item.get("workspace"), item.get("agent") or "agent"),
-                "agent": _ascii_label(item.get("agent"), "agent")[:8].lower(),
-                "state": state,
-            }
-        )
-        if len(rows) >= MAX_DEVICE_AGENTS:
-            break
-    return {"agents": rows}
+        if state in {"done", "failed"} and _is_stale(item, now):
+            continue
+        key = _workspace_key(item)
+        candidate = {
+            "label": _ascii_label(item.get("workspace"), item.get("agent") or "agent"),
+            "agent": _ascii_label(item.get("agent"), "agent")[:8].lower(),
+            "state": state,
+        }
+        current = groups.get(key)
+        if current is None:
+            groups[key] = candidate
+            order.append(key)
+        elif STATE_PRIORITY.get(state, 0) > STATE_PRIORITY.get(current["state"], 0):
+            groups[key] = candidate
+    return {"agents": [groups[key] for key in order[:MAX_DEVICE_AGENTS]]}
 
 
-def alert_payload(agent: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def alert_payload(
+    agent: Optional[Dict[str, Any]], snapshot: Optional[Dict[str, Any]] = None
+) -> Optional[Dict[str, Any]]:
     if not agent:
         return None
     state = str(agent.get("state") or "")
     if state == "done":
+        # One agent finishing does not mean the workspace is done. Claiming so
+        # is what puts a full-screen DONE over work that is still running.
+        if snapshot and _workspace_still_busy(agent, snapshot):
+            return None
         notify_state = "done"
     elif state in {"needs_input", "failed"}:
         notify_state = "waiting"
@@ -85,7 +125,7 @@ class DeviceNotifier:
         self._thread.start()
 
     def publish(self, snapshot: Dict[str, Any], changed_agent: Optional[Dict[str, Any]] = None) -> None:
-        alert = alert_payload(changed_agent)
+        alert = alert_payload(changed_agent, snapshot)
         with self._condition:
             self._latest = dashboard_payload(snapshot)
             self._dirty = True
