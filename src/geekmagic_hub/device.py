@@ -23,6 +23,10 @@ STATE_PRIORITY = {"done": 1, "working": 2, "failed": 3, "needs_input": 4}
 # States that mean the workspace has not wrapped up yet.
 LIVE_STATES = frozenset({"working", "needs_input"})
 
+# Branch names shared by every workspace of a repository, so they identify none
+# of them.
+GENERIC_BRANCHES = frozenset({"main", "master"})
+
 
 def _workspace_key(agent: Dict[str, Any]) -> str:
     return str(agent.get("workspace_path") or agent.get("workspace") or "")
@@ -45,6 +49,29 @@ def _ascii_label(value: Any, fallback: str = "agent") -> str:
     text = "".join(char for char in str(value or "") if " " <= char <= "~")
     text = " ".join(text.split())
     return (text or fallback)[:MAX_DEVICE_LABEL]
+
+
+def _branch_label(agent: Dict[str, Any]) -> str:
+    """The branch, minus the conventional type prefix.
+
+    Conductor names a workspace after its branch with that prefix dropped, so
+    ``fix/public-error-user-agent`` becomes ``public-error-user-agent``. Match
+    that, because the prefix is noise in twenty columns. A branch that names no
+    particular work says less than the workspace does, so it yields.
+    """
+    branch = str(agent.get("branch") or "").rsplit("/", 1)[-1]
+    return "" if branch in GENERIC_BRANCHES else branch
+
+
+def _display_label(agent: Dict[str, Any]) -> str:
+    """Name a workspace by its branch, falling back to the Conductor name.
+
+    ``CONDUCTOR_WORKSPACE_NAME`` is frozen into the agent process environment at
+    launch, so a workspace renamed afterwards keeps announcing the codename it
+    was created with until a new session replaces it. The branch is re-read from
+    git on every event, so it stays current.
+    """
+    return _ascii_label(_branch_label(agent) or agent.get("workspace"), agent.get("agent") or "agent")
 
 
 def _is_stale(item: Dict[str, Any], now: datetime) -> bool:
@@ -72,7 +99,7 @@ def dashboard_payload(snapshot: Dict[str, Any], now: Optional[datetime] = None) 
             continue
         key = _workspace_key(item)
         candidate = {
-            "label": _ascii_label(item.get("workspace"), item.get("agent") or "agent"),
+            "label": _display_label(item),
             "agent": _ascii_label(item.get("agent"), "agent")[:8].lower(),
             "state": state,
         }
@@ -101,7 +128,7 @@ def alert_payload(
         notify_state = "waiting"
     else:
         return None
-    label = _ascii_label(agent.get("workspace"), agent.get("agent") or "agent")
+    label = _display_label(agent)
     if state == "failed":
         label = _ascii_label("FAIL " + label)
     return {"state": notify_state, "ttl": 20, "label": label}

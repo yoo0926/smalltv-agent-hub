@@ -93,6 +93,80 @@ class DevicePayloadTests(unittest.TestCase):
         )
         self.assertEqual(len(payload["agents"]), 2)
 
+    def test_branch_outranks_a_workspace_name_left_over_from_creation(self):
+        # Conductor freezes CONDUCTOR_WORKSPACE_NAME into the session process at
+        # launch, so a workspace renamed afterwards keeps reporting the codename
+        # it was created with. The branch is re-read on every event.
+        payload = dashboard_payload(
+            {
+                "agents": [
+                    {
+                        "workspace": "austin",
+                        "workspace_path": "/ws/austin",
+                        "branch": "verify-hub-status",
+                        "agent": "claude",
+                        "state": "working",
+                    }
+                ]
+            }
+        )
+        self.assertEqual(payload["agents"][0]["label"], "verify-hub-status")
+
+    def test_branch_type_prefix_is_dropped(self):
+        payload = dashboard_payload(
+            {
+                "agents": [
+                    {
+                        "workspace": "seoul",
+                        "workspace_path": "/ws/seoul",
+                        "branch": "fix/public-error-user-agent",
+                        "agent": "codex",
+                        "state": "working",
+                    }
+                ]
+            }
+        )
+        self.assertEqual(payload["agents"][0]["label"], "public-error-user-ag")
+
+    def test_a_branch_naming_no_particular_work_yields_to_the_workspace(self):
+        def label_for(branch):
+            payload = dashboard_payload(
+                {
+                    "agents": [
+                        {
+                            "workspace": "desk-hub",
+                            "workspace_path": "/ws/desk-hub",
+                            "branch": branch,
+                            "agent": "claude",
+                            "state": "working",
+                        }
+                    ]
+                }
+            )
+            return payload["agents"][0]["label"]
+
+        self.assertEqual(label_for("main"), "desk-hub")
+        self.assertEqual(label_for("master"), "desk-hub")
+        self.assertEqual(label_for(""), "desk-hub")
+
+    def test_label_falls_back_to_the_agent_when_nothing_names_the_work(self):
+        payload = dashboard_payload(
+            {"agents": [{"workspace_path": "/ws/none", "agent": "codex", "state": "working"}]}
+        )
+        self.assertEqual(payload["agents"][0]["label"], "codex")
+
+    def test_alerts_use_the_branch_too(self):
+        finished = {
+            "workspace": "austin",
+            "workspace_path": "/ws/austin",
+            "branch": "feature/verify-hub-status",
+            "agent": "claude",
+            "state": "done",
+        }
+        self.assertEqual(alert_payload(finished)["label"], "verify-hub-status")
+        failed = {**finished, "state": "failed"}
+        self.assertEqual(alert_payload(failed)["label"], "FAIL verify-hub-stat")
+
     def test_finished_work_leaves_the_display_after_ten_minutes(self):
         def rows_after(minutes):
             finished = (NOW - timedelta(minutes=minutes)).isoformat(timespec="seconds")

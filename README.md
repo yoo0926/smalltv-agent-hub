@@ -10,7 +10,7 @@ Local-only status bridge for Conductor sessions running Claude Code and Codex. T
 
 - Claude Code: `working`, `needs_input`, `done`, `failed`, and `idle`
 - Codex: `done` for the officially supported external `agent-turn-complete` notification
-- Conductor workspace labeling from the hook's `cwd` plus the git branch
+- Conductor workspace labeling from the git branch, falling back to the Conductor workspace name, so a workspace renamed after its session started is still labeled correctly
 - One row per workspace, not per session, so a Claude restart or a Codex run beside it never splits a repository across two rows
 - Existing Codex `notify` command chaining instead of replacing it
 - Local-Conductor-only filtering through `CONDUCTOR_IS_LOCAL=1`
@@ -30,6 +30,8 @@ Local-only status bridge for Conductor sessions running Claude Code and Codex. T
 `Stop` ends a turn rather than the session, so a session that resumes without a new prompt — after a permission grant, for example — keeps showing its last state until the next turn ends. The bridge can close that gap with a throttled `PostToolUse` hook, which is implemented but not installed: the hook process starts on every tool call and costs roughly 80 ms each time. See the note above `CLAUDE_EVENTS` in [`scripts/install_hooks.py`](scripts/install_hooks.py) to turn it on.
 
 A workspace speaks with one voice on the display: among its sessions, `needs_input` outranks `failed`, which outranks `working`, which outranks `done`. A `done` alert is therefore suppressed while another session in the same workspace is still running, and finished work leaves the display after ten minutes.
+
+A row is named after its git branch rather than `CONDUCTOR_WORKSPACE_NAME`, because Conductor freezes that variable into the session process at launch: a workspace renamed afterwards keeps announcing the codename it was created with until a new session replaces it. The branch is re-read on every event, and Conductor derives the workspace name from it anyway. A branch's conventional type prefix is dropped, so `fix/public-error-user-agent` shows as `public-error-user-agent`. A branch that names no particular work — `main` or `master` — yields to the workspace name, which yields in turn to the agent type. Labels are cut to twenty characters by the firmware's buffer, so branches that differ only in a suffix can look alike on the display.
 
 Prompts and assistant responses are not persisted in the state file or offline queue. The display API emits short lifecycle messages such as `Working`, `Permission required`, and `Turn complete`.
 
@@ -99,7 +101,7 @@ The SmallTV pulls no data from the Mac. The bridge pushes outward, so the HTTP s
 ./bin/desk-hub --device-url http://DEVICE_IP
 ```
 
-Only the agent type, short workspace label, and lifecycle state are sent to the display. Prompts, responses, file paths, branches, and service credentials stay on the Mac.
+Only the agent type, short workspace label, and lifecycle state are sent to the display. That label is the branch name, so treat branch names as visible on the desk; a branch's type prefix is dropped and the rest is cut to twenty printable ASCII characters. Prompts, responses, file paths, and service credentials stay on the Mac.
 
 The firmware's optional web password also protects `/api/agents` and `/api/notify`. Leave it disabled for this first local setup; digest-auth support can be added to the Mac push client before enabling it.
 
@@ -168,6 +170,7 @@ python3 scripts/install_launch_agent.py --uninstall --apply
 4. Inspect `http://127.0.0.1:4747/api/v1/status`.
 5. Open a new Codex session in Conductor and finish one turn.
 6. Confirm that the returned `cwd`, workspace name, and branch identify the correct Conductor worktree.
+   The branch is what reaches the display, so check it against the label shown there.
 
 If a Conductor-managed Claude/Codex binary uses an isolated home instead of `~/.claude` or `~/.codex`, point that harness at the system executable or install the same hook configuration in its actual config home. The event endpoint and firmware protocol do not change.
 

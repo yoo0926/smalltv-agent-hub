@@ -15,7 +15,8 @@ Claude Code와 Codex를 실행하는 Conductor 세션을 위한 로컬 전용 �
 
 - Claude Code 상태: `working`, `needs_input`, `done`, `failed`, `idle`
 - Codex의 공식 외부 `agent-turn-complete` 알림에 대한 `done` 상태
-- 훅의 `cwd`와 Git 브랜치를 이용한 Conductor 워크스페이스 표시
+- Git 브랜치를 우선 사용하고 없으면 Conductor 워크스페이스 이름으로 대체하는
+  워크스페이스 표시. 세션을 연 뒤 워크스페이스 이름을 바꿔도 올바르게 표시됩니다
 - 세션이 아니라 워크스페이스 단위로 한 행 표시. Claude를 다시 시작하거나
   Codex를 함께 돌려도 같은 저장소가 두 행으로 갈라지지 않습니다
 - 기존 Codex `notify` 명령을 덮어쓰지 않고 연쇄 실행
@@ -53,6 +54,17 @@ Claude 주 세션의 종료가 아니라 진행 상태로 처리합니다. Claud
 `needs_input`이 `failed`보다, `failed`가 `working`보다, `working`이 `done`보다
 우선합니다. 따라서 같은 워크스페이스에서 다른 세션이 아직 돌고 있으면
 `done` 알림을 띄우지 않고, 끝난 작업은 10분 뒤 화면에서 사라집니다.
+
+각 행의 이름은 `CONDUCTOR_WORKSPACE_NAME`이 아니라 Git 브랜치에서 가져옵니다.
+Conductor는 세션을 시작할 때 이 환경변수를 프로세스에 고정하므로, 세션을 연
+뒤에 워크스페이스 이름을 바꾸면 새 세션이 열릴 때까지 생성 당시의 코드네임을
+계속 알립니다. 브랜치는 이벤트마다 다시 읽고, Conductor의 워크스페이스 이름
+자체도 브랜치에서 파생됩니다. 브랜치의 타입 접두사는 제거하므로
+`fix/public-error-user-agent`는 `public-error-user-agent`로 표시됩니다.
+`main`이나 `master`처럼 특정 작업을 가리키지 않는 브랜치는 워크스페이스
+이름에, 그마저 없으면 에이전트 종류에 자리를 넘깁니다. 펌웨어 버퍼 때문에
+이름은 20자로 잘리므로, 뒷부분만 다른 브랜치는 화면에서 비슷해 보일 수
+있습니다.
 
 프롬프트와 응답 내용은 상태 파일이나 오프라인 큐에 저장하지 않습니다.
 화면 API에는 `Working`, `Permission required`, `Turn complete` 같은 짧은
@@ -128,7 +140,9 @@ SmallTV가 Mac에서 데이터를 가져오는 구조가 아니라, 브리지가
 ```
 
 화면에는 에이전트 종류, 짧은 워크스페이스 이름, 작업 상태만 전송합니다.
-프롬프트, 응답, 파일 경로, 브랜치와 서비스 인증 정보는 Mac에 남습니다.
+이 이름은 브랜치 이름이므로 브랜치 이름은 책상에서 보인다고 가정하세요.
+브랜치의 타입 접두사는 제거되고 나머지는 출력 가능한 ASCII 20자로
+잘립니다. 프롬프트, 응답, 파일 경로와 서비스 인증 정보는 Mac에 남습니다.
 
 펌웨어의 선택적 웹 비밀번호를 켜면 `/api/agents`와 `/api/notify`도
 보호됩니다. 첫 로컬 설정에서는 비활성화해 두세요. 활성화하기 전에 Mac
@@ -205,7 +219,8 @@ python3 scripts/install_launch_agent.py --uninstall --apply
 4. `http://127.0.0.1:4747/api/v1/status`를 확인합니다.
 5. Conductor에서 새 Codex 세션을 열고 한 차례 작업을 완료합니다.
 6. 반환된 `cwd`, 워크스페이스 이름과 브랜치가 올바른 Conductor
-   worktree를 가리키는지 확인합니다.
+   worktree를 가리키는지 확인합니다. 화면에 도달하는 값은 브랜치이므로
+   기기에 표시된 이름과 대조하세요.
 
 Conductor가 관리하는 Claude/Codex 실행 파일이 `~/.claude` 또는
 `~/.codex`와 다른 격리된 홈을 사용한다면, 해당 실행 환경이 시스템 실행

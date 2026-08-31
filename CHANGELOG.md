@@ -5,6 +5,12 @@ All notable user-visible changes are recorded here. The project follows
 
 ## Unreleased
 
+- Fixed a workspace renamed after its session started showing its old
+  creation-time codename on the display. Conductor freezes
+  `CONDUCTOR_WORKSPACE_NAME` into the session process at launch, so rows are
+  now named after the git branch, which is re-read on every event. The
+  branch's type prefix is dropped, and `main`/`master` yields to the
+  workspace name. Branch names are therefore visible on the display.
 - Fixed the display showing one row per session, which repeated a workspace
   whenever Claude restarted under a new session id or Codex ran beside it. Rows
   are now one per workspace, and the session that most needs attention speaks
