@@ -432,19 +432,20 @@ class SymlinkedWorkspaceTests(unittest.TestCase):
         self.assertEqual(len(dashboard_payload(snapshot, now=NOW)["agents"]), 2)
 
 
-class OvertakenSessionTests(unittest.TestCase):
-    """A permission prompt makes a session needs_input, and answering it sends
-    nothing: Claude only reports again when the turn ends. A session that died
-    while waiting therefore keeps the workspace pinned on NEEDS YOU. Priority
-    alone cannot tell that apart -- but a sibling that kept reporting can."""
+class SupersededSessionTests(unittest.TestCase):
+    """Conductor runs one agent of a kind per workspace: restarting a chat starts
+    a new session id and abandons the old one, which never reports again. A
+    session killed while it had a permission prompt open therefore keeps the
+    workspace pinned on NEEDS YOU forever, because nothing moves it off that
+    state. The newer session of the same kind is the workspace's real voice."""
 
     @staticmethod
-    def _session(state, minutes_ago, session_id):
+    def _session(agent, state, minutes_ago):
         return {
             "workspace": "shared",
             "workspace_path": "/ws/shared",
-            "agent": "claude",
-            "session_id": session_id,
+            "agent": agent,
+            "source": agent,
             "state": state,
             "updated_at": (NOW - timedelta(minutes=minutes_ago)).isoformat(timespec="seconds"),
         }
@@ -454,24 +455,40 @@ class OvertakenSessionTests(unittest.TestCase):
         ordered = sorted(sessions, key=lambda s: s["updated_at"], reverse=True)
         return dashboard_payload({"agents": ordered}, now=NOW)["agents"]
 
-    def test_a_silent_waiting_session_yields_to_one_still_working(self):
+    def test_an_abandoned_session_stops_speaking_once_a_newer_one_exists(self):
         rows = self._rows(
-            self._session("needs_input", 27, "ghost"),
-            self._session("working", 5, "alive"),
+            self._session("claude", "needs_input", 10),   # killed with a prompt open
+            self._session("claude", "working", 3),        # the session that replaced it
         )
         self.assertEqual([r["state"] for r in rows], ["working"])
 
-    def test_a_recent_request_for_input_still_wins(self):
-        """The whole point of the alert is that it waits for you, so a session
-        that asked a moment ago must not be pushed aside by a busy sibling."""
+    def test_the_newest_session_speaks_even_when_its_state_ranks_lower(self):
+        """Recency decides within one kind of agent, not the state ranking --
+        otherwise the abandoned session above could never be displaced."""
         rows = self._rows(
-            self._session("needs_input", 6, "asking"),
-            self._session("working", 2, "busy"),
+            self._session("claude", "needs_input", 10),
+            self._session("claude", "done", 3),
+        )
+        self.assertEqual([r["state"] for r in rows], ["done"])
+
+    def test_a_new_session_asking_for_input_is_heard(self):
+        rows = self._rows(
+            self._session("claude", "working", 10),
+            self._session("claude", "needs_input", 3),
+        )
+        self.assertEqual([r["state"] for r in rows], ["needs_input"])
+
+    def test_a_second_agent_in_the_same_workspace_is_not_superseded(self):
+        """Claude and Codex genuinely do run side by side, so the state ranking
+        still decides between them however old each one's last report is."""
+        rows = self._rows(
+            self._session("codex", "needs_input", 10),
+            self._session("claude", "working", 3),
         )
         self.assertEqual([r["state"] for r in rows], ["needs_input"])
 
     def test_a_lone_waiting_session_is_not_pushed_aside_by_nothing(self):
-        rows = self._rows(self._session("needs_input", 45, "asking"))
+        rows = self._rows(self._session("claude", "needs_input", 45))
         self.assertEqual([r["state"] for r in rows], ["needs_input"])
 
 

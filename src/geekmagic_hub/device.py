@@ -34,13 +34,6 @@ COMPLETED_VISIBLE_FOR = timedelta(minutes=10)
 # it, short enough that a forgotten row does not survive the day.
 LIVE_VISIBLE_FOR = timedelta(hours=6)
 
-# How far a session may fall behind a sibling before it stops speaking for their
-# shared workspace. Answering a permission prompt sends nothing -- Claude reports
-# again only when the turn ends -- so a session that died while waiting keeps the
-# workspace pinned on "needs input" forever. Priority alone cannot tell a session
-# that is genuinely waiting from one that stopped existing; a sibling that kept
-# reporting can. Long enough that a real wait alongside busy work is respected.
-OVERTAKEN_AFTER = timedelta(minutes=15)
 
 # Which session speaks for a workspace: the ones asking for a human first, then
 # the ones still moving, and only then the ones that have finished.
@@ -68,9 +61,11 @@ def _workspace_still_busy(agent: Dict[str, Any], snapshot: Dict[str, Any]) -> bo
     never be the one that answers yes.
     """
     workspace = workspace_key(agent)
+    # Through the same filter: an abandoned session left mid-work would otherwise
+    # suppress the alert for work that really did finish.
     return any(
         workspace_key(other) == workspace and str(other.get("state") or "") in LIVE_STATES
-        for other in snapshot.get("agents", [])
+        for other in _current_sessions(snapshot.get("agents", []))
     )
 
 
@@ -138,12 +133,29 @@ def _is_stale(item: Dict[str, Any], now: datetime, older_than: timedelta = COMPL
     return updated is not None and now - updated > older_than
 
 
-def _overtaken(item: Dict[str, Any], by: Dict[str, Any]) -> bool:
-    """Whether `item` fell so far behind `by` that it no longer speaks for them."""
-    mine, theirs = _updated(item), _updated(by)
-    if mine is None or theirs is None:
-        return False
-    return theirs - mine > OVERTAKEN_AFTER
+
+def _current_sessions(agents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Drop sessions that a newer one of the same kind has replaced.
+
+    Conductor runs one agent of a kind per workspace: restarting a chat starts a
+    new session id and abandons the old one, which never reports again. An
+    abandoned session keeps whatever state it died in -- and a permission prompt
+    dies as `needs_input`, which outranks everything, so the workspace stays
+    pinned on it forever. Recency settles that; the state ranking cannot, because
+    the stale row is exactly the one ranked highest.
+
+    Only within one kind of agent. Claude and Codex genuinely do run side by side
+    in a workspace, so neither supersedes the other.
+    """
+    seen = set()
+    current = []
+    for item in agents:   # newest first, as the store hands them over
+        mark = (workspace_key(item), str(item.get("source") or item.get("agent") or ""))
+        if mark in seen:
+            continue
+        seen.add(mark)
+        current.append(item)
+    return current
 
 
 def dashboard_payload(snapshot: Dict[str, Any], now: Optional[datetime] = None) -> Dict[str, Any]:
@@ -153,7 +165,7 @@ def dashboard_payload(snapshot: Dict[str, Any], now: Optional[datetime] = None) 
     # workspace, so the session that most deserves attention speaks for it.
     groups: Dict[str, Dict[str, Any]] = {}
     order: List[str] = []
-    for item in snapshot.get("agents", []):
+    for item in _current_sessions(snapshot.get("agents", [])):
         state = str(item.get("state") or "idle")
         if state == "idle":
             continue
@@ -166,12 +178,7 @@ def dashboard_payload(snapshot: Dict[str, Any], now: Optional[datetime] = None) 
         if current is None:
             groups[key] = item
             order.append(key)
-        elif STATE_PRIORITY.get(state, 0) > STATE_PRIORITY.get(
-            str(current.get("state") or ""), 0
-        ) and not _overtaken(item, current):
-            # Agents arrive newest first, so `current` is the more recent report.
-            # A higher-ranking state only takes the workspace back if it is still
-            # recent enough to believe.
+        elif STATE_PRIORITY.get(state, 0) > STATE_PRIORITY.get(str(current.get("state") or ""), 0):
             groups[key] = item
     # How much room a label gets depends on the layout the firmware picks, and
     # that depends on how many rows survive the grouping. So labels are only
