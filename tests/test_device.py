@@ -1,3 +1,5 @@
+import os
+import tempfile
 import threading
 import unittest
 from datetime import datetime, timedelta
@@ -383,6 +385,94 @@ class AlertDeliveryTests(unittest.TestCase):
         """Measured worst-case device latency is ~4 s; a shorter timeout turns
         device slowness into abandoned pushes and discarded alerts."""
         self.assertGreaterEqual(DeviceNotifier("http://127.0.0.1:9").timeout, 4.0)
+
+
+class SymlinkedWorkspaceTests(unittest.TestCase):
+    """Conductor names a workspace directory with a codename and then symlinks
+    the branch name to it. Sessions in the same workspace can report either path,
+    so grouping on the raw string split one workspace across two rows — which is
+    the one thing the per-workspace grouping exists to prevent."""
+
+    def test_one_workspace_reached_by_two_paths_is_one_row(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            real = os.path.join(tmp, "albuquerque")
+            os.mkdir(real)
+            alias = os.path.join(tmp, "codedeploy-healthcheck-hang")
+            os.symlink(real, alias)
+            snapshot = {
+                "agents": [
+                    {
+                        "workspace": "codedeploy-healthcheck-hang",
+                        "workspace_path": alias,
+                        "branch": "codedeploy-healthcheck-hang",
+                        "agent": "claude",
+                        "state": "needs_input",
+                    },
+                    {
+                        "workspace": "codedeploy-healthcheck-hang",
+                        "workspace_path": real,
+                        "branch": "codedeploy-healthcheck-hang",
+                        "agent": "claude",
+                        "state": "done",
+                    },
+                ]
+            }
+            rows = dashboard_payload(snapshot, now=NOW)["agents"]
+            self.assertEqual(len(rows), 1)
+            # The session asking for a human still speaks for the workspace.
+            self.assertEqual(rows[0]["state"], "needs_input")
+
+    def test_genuinely_separate_workspaces_still_get_their_own_row(self):
+        snapshot = {
+            "agents": [
+                {"workspace": "one", "workspace_path": "/ws/one", "agent": "claude", "state": "working"},
+                {"workspace": "two", "workspace_path": "/ws/two", "agent": "claude", "state": "working"},
+            ]
+        }
+        self.assertEqual(len(dashboard_payload(snapshot, now=NOW)["agents"]), 2)
+
+
+class OvertakenSessionTests(unittest.TestCase):
+    """A permission prompt makes a session needs_input, and answering it sends
+    nothing: Claude only reports again when the turn ends. A session that died
+    while waiting therefore keeps the workspace pinned on NEEDS YOU. Priority
+    alone cannot tell that apart -- but a sibling that kept reporting can."""
+
+    @staticmethod
+    def _session(state, minutes_ago, session_id):
+        return {
+            "workspace": "shared",
+            "workspace_path": "/ws/shared",
+            "agent": "claude",
+            "session_id": session_id,
+            "state": state,
+            "updated_at": (NOW - timedelta(minutes=minutes_ago)).isoformat(timespec="seconds"),
+        }
+
+    def _rows(self, *sessions):
+        # The store hands the payload its agents newest first.
+        ordered = sorted(sessions, key=lambda s: s["updated_at"], reverse=True)
+        return dashboard_payload({"agents": ordered}, now=NOW)["agents"]
+
+    def test_a_silent_waiting_session_yields_to_one_still_working(self):
+        rows = self._rows(
+            self._session("needs_input", 27, "ghost"),
+            self._session("working", 5, "alive"),
+        )
+        self.assertEqual([r["state"] for r in rows], ["working"])
+
+    def test_a_recent_request_for_input_still_wins(self):
+        """The whole point of the alert is that it waits for you, so a session
+        that asked a moment ago must not be pushed aside by a busy sibling."""
+        rows = self._rows(
+            self._session("needs_input", 6, "asking"),
+            self._session("working", 2, "busy"),
+        )
+        self.assertEqual([r["state"] for r in rows], ["needs_input"])
+
+    def test_a_lone_waiting_session_is_not_pushed_aside_by_nothing(self):
+        rows = self._rows(self._session("needs_input", 45, "asking"))
+        self.assertEqual([r["state"] for r in rows], ["needs_input"])
 
 
 if __name__ == "__main__":

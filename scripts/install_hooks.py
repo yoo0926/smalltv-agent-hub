@@ -26,6 +26,20 @@ CLAUDE_EVENTS = (
     "SessionEnd",
 )
 
+# Codex fires the same hook events under the same names, and its payloads use
+# Claude's field names too. Its `notify` command only speaks when a turn ends,
+# so on its own the display could never show Codex working — it sat on the last
+# "done" until that aged off. PermissionRequest is Codex-only and is the one
+# that matters most: it blocks until a human answers.
+CODEX_HOOK_EVENTS = (
+    "SessionStart",
+    "UserPromptSubmit",
+    "PermissionRequest",
+    "SubagentStart",
+    "Stop",
+    "SessionEnd",
+)
+
 # Deliberately absent: "PostToolUse". The bridge understands it (see
 # geekmagic_hub.events.ACTIVITY_EVENTS) and the hook adapter throttles it to one
 # send per session per ten seconds, which returns a session to "working" when it
@@ -88,6 +102,53 @@ def merge_claude_hooks(settings: Dict[str, Any], command: str) -> Tuple[int, int
                 break
         if not exists:
             groups.append({"matcher": "", "hooks": [{"type": "command", "command": command}]})
+            added += 1
+    return added, updated
+
+
+def _is_desk_hub_codex(command: Any) -> bool:
+    return isinstance(command, str) and "desk-hub-event" in command and " codex" in command
+
+
+def merge_codex_hooks(hooks_doc: Dict[str, Any], command: str) -> Tuple[int, int]:
+    """Add the desk-hub hook to Codex's hooks.json without disturbing anything else.
+
+    Other tools already own entries here, so every event keeps whatever groups it
+    has and only gains one more. A desk-hub entry left over from a clone at a
+    different path is rewritten in place rather than duplicated.
+    """
+    hooks = hooks_doc.setdefault("hooks", {})
+    if not isinstance(hooks, dict):
+        raise ValueError("Codex hooks.json 'hooks' must be an object")
+    added = 0
+    updated = 0
+    for event in CODEX_HOOK_EVENTS:
+        groups = hooks.setdefault(event, [])
+        if not isinstance(groups, list):
+            raise ValueError(f"Codex hook '{event}' must be an array")
+        exists = False
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            group_hooks = group.get("hooks", [])
+            if not isinstance(group_hooks, list):
+                continue
+            for hook in group_hooks:
+                if not isinstance(hook, dict):
+                    continue
+                existing = hook.get("command")
+                if existing == command:
+                    exists = True
+                    break
+                if _is_desk_hub_codex(existing):
+                    hook["command"] = command
+                    updated += 1
+                    exists = True
+                    break
+            if exists:
+                break
+        if not exists:
+            groups.append({"hooks": [{"type": "command", "command": command}]})
             added += 1
     return added, updated
 
@@ -215,6 +276,8 @@ def main() -> int:
         )
 
     codex_path = args.home / ".codex" / "config.toml"
+    codex_hooks_path = args.home / ".codex" / "hooks.json"
+    codex_hooks_doc: Dict[str, Any] = {}
     codex_config = ""
     new_codex_config = ""
     forward_argv: Optional[List[str]] = None
@@ -238,6 +301,14 @@ def main() -> int:
             new_codex_config = replace_notify(codex_config, new_notify)
             actions.append(f"Codex: set chained notify in {codex_path}")
 
+        codex_hooks_doc = load_json(codex_hooks_path)
+        hooks_added, hooks_updated = merge_codex_hooks(
+            codex_hooks_doc, f"{shlex.quote(str(hook))} codex"
+        )
+        actions.append(
+            f"Codex: add {hooks_added}, update {hooks_updated} hooks in {codex_hooks_path}"
+        )
+
     print("\n".join(actions))
     if not args.apply:
         print("Dry run only. Re-run with --apply to write changes.")
@@ -254,6 +325,10 @@ def main() -> int:
         if saved:
             backups.append(saved)
         write_text(codex_path, new_codex_config)
+        saved = backup(codex_hooks_path)
+        if saved:
+            backups.append(saved)
+        write_text(codex_hooks_path, json.dumps(codex_hooks_doc, ensure_ascii=False, indent=2) + "\n")
         if forward_argv:
             write_text(forward_path, json.dumps({"argv": forward_argv}, ensure_ascii=False, indent=2) + "\n")
 

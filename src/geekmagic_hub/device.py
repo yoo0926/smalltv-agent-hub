@@ -12,6 +12,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
 
+from .events import workspace_key
+
 
 MAX_DEVICE_AGENTS = 4
 # The alert screen centres one line of size-2 text across 240 px, which is the
@@ -32,6 +34,14 @@ COMPLETED_VISIBLE_FOR = timedelta(minutes=10)
 # it, short enough that a forgotten row does not survive the day.
 LIVE_VISIBLE_FOR = timedelta(hours=6)
 
+# How far a session may fall behind a sibling before it stops speaking for their
+# shared workspace. Answering a permission prompt sends nothing -- Claude reports
+# again only when the turn ends -- so a session that died while waiting keeps the
+# workspace pinned on "needs input" forever. Priority alone cannot tell a session
+# that is genuinely waiting from one that stopped existing; a sibling that kept
+# reporting can. Long enough that a real wait alongside busy work is respected.
+OVERTAKEN_AFTER = timedelta(minutes=15)
+
 # Which session speaks for a workspace: the ones asking for a human first, then
 # the ones still moving, and only then the ones that have finished.
 STATE_PRIORITY = {"done": 1, "working": 2, "failed": 3, "needs_input": 4}
@@ -51,19 +61,15 @@ GENERIC_BRANCHES = frozenset({"main", "master"})
 ALERT_RETRY_FOR = 120.0
 
 
-def _workspace_key(agent: Dict[str, Any]) -> str:
-    return str(agent.get("workspace_path") or agent.get("workspace") or "")
-
-
 def _workspace_still_busy(agent: Dict[str, Any], snapshot: Dict[str, Any]) -> bool:
     """Whether any session in the same workspace is still live.
 
     Only asked about a session that just finished, so the session itself can
     never be the one that answers yes.
     """
-    workspace = _workspace_key(agent)
+    workspace = workspace_key(agent)
     return any(
-        _workspace_key(other) == workspace and str(other.get("state") or "") in LIVE_STATES
+        workspace_key(other) == workspace and str(other.get("state") or "") in LIVE_STATES
         for other in snapshot.get("agents", [])
     )
 
@@ -117,16 +123,27 @@ def _display_label(agent: Dict[str, Any], budget: int = MAX_DEVICE_LABEL) -> str
     )
 
 
-def _is_stale(item: Dict[str, Any], now: datetime, older_than: timedelta = COMPLETED_VISIBLE_FOR) -> bool:
+def _updated(item: Dict[str, Any]) -> Optional[datetime]:
     try:
-        updated = datetime.fromisoformat(str(item.get("updated_at") or "").replace("Z", "+00:00"))
+        stamp = datetime.fromisoformat(str(item.get("updated_at") or "").replace("Z", "+00:00"))
     except ValueError:
-        # No usable timestamp: treat it as current rather than hide it. A row
-        # that never reports a time is a bug worth seeing, not one to swallow.
+        return None
+    return stamp if stamp.tzinfo else stamp.replace(tzinfo=timezone.utc)
+
+
+def _is_stale(item: Dict[str, Any], now: datetime, older_than: timedelta = COMPLETED_VISIBLE_FOR) -> bool:
+    updated = _updated(item)
+    # No usable timestamp: treat it as current rather than hide it. A row that
+    # never reports a time is a bug worth seeing, not one to swallow.
+    return updated is not None and now - updated > older_than
+
+
+def _overtaken(item: Dict[str, Any], by: Dict[str, Any]) -> bool:
+    """Whether `item` fell so far behind `by` that it no longer speaks for them."""
+    mine, theirs = _updated(item), _updated(by)
+    if mine is None or theirs is None:
         return False
-    if updated.tzinfo is None:
-        updated = updated.replace(tzinfo=timezone.utc)
-    return now - updated > older_than
+    return theirs - mine > OVERTAKEN_AFTER
 
 
 def dashboard_payload(snapshot: Dict[str, Any], now: Optional[datetime] = None) -> Dict[str, Any]:
@@ -144,12 +161,17 @@ def dashboard_payload(snapshot: Dict[str, Any], now: Optional[datetime] = None) 
             continue
         if state in LIVE_STATES and _is_stale(item, now, LIVE_VISIBLE_FOR):
             continue
-        key = _workspace_key(item)
+        key = workspace_key(item)
         current = groups.get(key)
         if current is None:
             groups[key] = item
             order.append(key)
-        elif STATE_PRIORITY.get(state, 0) > STATE_PRIORITY.get(str(current.get("state") or ""), 0):
+        elif STATE_PRIORITY.get(state, 0) > STATE_PRIORITY.get(
+            str(current.get("state") or ""), 0
+        ) and not _overtaken(item, current):
+            # Agents arrive newest first, so `current` is the more recent report.
+            # A higher-ranking state only takes the workspace back if it is still
+            # recent enough to believe.
             groups[key] = item
     # How much room a label gets depends on the layout the firmware picks, and
     # that depends on how many rows survive the grouping. So labels are only

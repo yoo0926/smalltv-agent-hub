@@ -10,7 +10,7 @@ from collections import deque
 from pathlib import Path
 from typing import Any, Deque, Dict, List
 
-from .events import ACTIVITY_EVENTS, normalize_event, utc_now
+from .events import ACTIVITY_EVENTS, normalize_event, utc_now, workspace_key
 
 # Conductor cycles through session ids quickly, so tracked sessions are capped
 # as a backstop even when the per-workspace pruning below cannot apply.
@@ -18,10 +18,6 @@ MAX_TRACKED_SESSIONS = 200
 
 # A session in one of these states may still produce work and is never pruned.
 LIVE_STATES = frozenset({"working", "needs_input"})
-
-
-def _workspace_key(agent: Dict[str, Any]) -> str:
-    return str(agent.get("workspace_path") or agent.get("workspace") or "")
 
 
 class StateStore:
@@ -110,14 +106,14 @@ class StateStore:
         keep speaking for a workspace that has moved on. Sources are kept apart
         so a new Claude session never hides what Codex just did.
         """
-        workspace = _workspace_key(agent)
+        workspace = workspace_key(agent)
         updated_at = str(agent.get("updated_at") or "")
         for other_key, other in list(self._agents.items()):
             if other_key == key or other.get("state") in LIVE_STATES:
                 continue
             if other.get("source") != agent.get("source"):
                 continue
-            if _workspace_key(other) != workspace:
+            if workspace_key(other) != workspace:
                 continue
             if str(other.get("updated_at") or "") <= updated_at:
                 del self._agents[other_key]
