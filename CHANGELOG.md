@@ -5,6 +5,10 @@ All notable user-visible changes are recorded here. The project follows
 
 ## Unreleased
 
+- Fixed a workspace waiting for you dropping off the display whenever four others were
+  busier. Rows were filled by recency alone, so the one asking for a human was the first
+  to be cut. Workspaces now reach the four rows by how much they want attention, and
+  appear in that order, with recency settling ties.
 - Fixed two workspaces whose branches share a long prefix rendering as the
   same name. Labels now lose their middle rather than their tail, and the
   bridge spends the same per-layout budget the firmware does, so the display no

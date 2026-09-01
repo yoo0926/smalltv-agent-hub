@@ -180,10 +180,19 @@ def dashboard_payload(snapshot: Dict[str, Any], now: Optional[datetime] = None) 
             order.append(key)
         elif STATE_PRIORITY.get(state, 0) > STATE_PRIORITY.get(str(current.get("state") or ""), 0):
             groups[key] = item
+    # More workspaces than rows is the normal case, so what gets cut matters.
+    # `order` is recency, which on its own dropped the workspace asking for a
+    # human whenever four others happened to be busier -- the one row you most
+    # need to see. Rank by how much each workspace wants attention first, and let
+    # recency settle ties, so the urgent row is both kept and shown at the top.
+    ranked = sorted(
+        enumerate(order),
+        key=lambda pair: (-STATE_PRIORITY.get(str(groups[pair[1]].get("state") or ""), 0), pair[0]),
+    )
     # How much room a label gets depends on the layout the firmware picks, and
     # that depends on how many rows survive the grouping. So labels are only
     # written once the final row count is known.
-    shown = [groups[key] for key in order[:MAX_DEVICE_AGENTS]]
+    shown = [groups[key] for _, key in ranked[:MAX_DEVICE_AGENTS]]
     budget = LAYOUT_LABEL_BUDGET.get(len(shown), MAX_DEVICE_LABEL)
     return {
         "agents": [

@@ -31,9 +31,12 @@ class DevicePayloadTests(unittest.TestCase):
         }
         payload = dashboard_payload(snapshot)
         self.assertEqual(len(payload["agents"]), 4)
-        self.assertEqual(payload["agents"][0]["label"], "a-very-..ce-name")
-        self.assertNotIn("message", payload["agents"][0])
-        self.assertNotIn("cwd", payload["agents"][0])
+        # Which row comes first is decided by urgency and has its own tests; what
+        # matters here is that the long name is shortened and that nothing
+        # private rides along on any row.
+        self.assertIn("a-very-..ce-name", [row["label"] for row in payload["agents"]])
+        for row in payload["agents"]:
+            self.assertEqual(set(row), {"label", "agent", "state"})
 
     def test_idle_sessions_are_not_sent_to_the_display(self):
         payload = dashboard_payload(
@@ -490,6 +493,68 @@ class SupersededSessionTests(unittest.TestCase):
     def test_a_lone_waiting_session_is_not_pushed_aside_by_nothing(self):
         rows = self._rows(self._session("claude", "needs_input", 45))
         self.assertEqual([r["state"] for r in rows], ["needs_input"])
+
+
+class UrgencyOrderTests(unittest.TestCase):
+    """The display holds four rows and there are usually more workspaces than
+    that. Cutting purely by recency dropped the workspace asking for a human
+    whenever four others happened to be busier -- which is the one row you most
+    need to see."""
+
+    @staticmethod
+    def _ws(name, state, minutes_ago):
+        return {
+            "workspace": name,
+            "workspace_path": f"/ws/{name}",
+            "branch": name,
+            "agent": "claude",
+            "source": "claude",
+            "state": state,
+            "updated_at": (NOW - timedelta(minutes=minutes_ago)).isoformat(timespec="seconds"),
+        }
+
+    def _rows(self, *workspaces):
+        ordered = sorted(workspaces, key=lambda w: w["updated_at"], reverse=True)
+        return dashboard_payload({"agents": ordered}, now=NOW)["agents"]
+
+    def test_a_workspace_waiting_for_a_human_is_never_cut(self):
+        rows = self._rows(
+            self._ws("busy-1", "working", 1),
+            self._ws("busy-2", "working", 2),
+            self._ws("busy-3", "working", 3),
+            self._ws("busy-4", "working", 4),
+            self._ws("waiting", "needs_input", 30),
+        )
+        self.assertIn("waiting", [r["label"] for r in rows])
+        self.assertEqual(rows[0]["label"], "waiting")
+
+    def test_rows_run_from_most_to_least_urgent(self):
+        rows = self._rows(
+            self._ws("finished", "done", 1),
+            self._ws("busy", "working", 2),
+            self._ws("broken", "failed", 3),
+            self._ws("waiting", "needs_input", 4),
+        )
+        self.assertEqual([r["label"] for r in rows], ["waiting", "broken", "busy", "finished"])
+
+    def test_workspaces_at_the_same_urgency_stay_in_recency_order(self):
+        rows = self._rows(
+            self._ws("older", "working", 9),
+            self._ws("newer", "working", 1),
+            self._ws("middle", "working", 5),
+        )
+        self.assertEqual([r["label"] for r in rows], ["newer", "middle", "older"])
+
+    def test_finished_work_still_gives_way_to_anything_live(self):
+        rows = self._rows(
+            self._ws("done-1", "done", 1),
+            self._ws("done-2", "done", 2),
+            self._ws("done-3", "done", 3),
+            self._ws("done-4", "done", 4),
+            self._ws("busy", "working", 9),
+        )
+        self.assertEqual(rows[0]["label"], "busy")
+        self.assertIn("busy", [r["label"] for r in rows])
 
 
 if __name__ == "__main__":
