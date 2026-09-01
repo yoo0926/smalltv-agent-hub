@@ -14,30 +14,16 @@ Claude Code와 Codex를 실행하는 Conductor 세션을 위한 로컬 전용 �
 ## 현재 지원 기능
 
 - Claude Code 상태: `working`, `needs_input`, `done`, `failed`, `idle`
-- Codex의 공식 외부 `agent-turn-complete` 알림에 대한 `done` 상태
-- Git 브랜치를 우선 사용하고 없으면 Conductor 워크스페이스 이름으로 대체하는
-  워크스페이스 표시. 세션을 연 뒤 워크스페이스 이름을 바꿔도 올바르게 표시됩니다
-- 세션이 아니라 워크스페이스 단위로 한 행 표시. Claude를 다시 시작하거나
-  Codex를 함께 돌려도 같은 저장소가 두 행으로 갈라지지 않습니다
-- 기존 Codex `notify` 명령을 덮어쓰지 않고 연쇄 실행
+- Codex 상태: `working`, `needs_input`, `done`, `idle`. `~/.codex/hooks.json`에
+  설치한 훅으로 받고, 공식 `agent-turn-complete` 알림도 턴 완료 경로로 함께 유지합니다
 - `CONDUCTOR_IS_LOCAL=1`을 이용한 로컬 Conductor 세션 전용 필터링
 - 개인정보를 최소화한 오프라인 큐와 브리지 시작 시 자동 재전송
-- 외부 의존성 없는 Python 서비스, Homebrew Python 3.14 권장 및 Python
-  3.9+ 호환, 로컬 상태 저장
+- 외부 의존성 없는 Python 서비스, 로컬 상태 저장
 - `POST /api/agents` 비동기 전송과 `POST /api/notify`를 통한 전체 화면
   `done` / `needs_input` 알림
-- SmallTV Pro 터치 조작: 탭으로 알림 닫기, 길게 눌러 앱 메뉴 열기,
-  탭으로 다음 이동, 빠르게 두 번 탭해 이전 이동, 다시 길게 눌러 선택
-- 앱 메뉴 마지막의 기기 내 Settings 카드: 브라우저에 입력할 IP와
-  `.local` 주소, 접속한 네트워크, 펌웨어 버전을 표시
-- 웹 대시보드에서 앱을 즉시 전환하고 선택 상태 저장
-- Open-Meteo 현재 날씨와 4일 예보를 사용하는 날씨 화면
-- `000660.KS` 같은 거래소 접미사 심볼을 지원하는 Yahoo Finance 티커와
-  웹 대시보드의 조회 진단 정보
-- 한국 종목용 원화 기호와 천 단위로 구분된 원 단위 가격 표시
-- 작업 하나는 큰 단일 화면, 두 개는 큰 카드, 세 개에서 네 개는 읽기
-  쉬운 축약 행으로 표시하는 반응형 Agent Hub 레이아웃
-- 웹 대시보드 설정 저장 후 성공 또는 오류 토스트 표시
+- 기기 화면 자체의 기능 — 앱 메뉴, Settings 카드, 날씨, 티커, 반응형 Agent Hub
+  레이아웃 — 은 [`firmware/smalltv-agent-hub/AGENT_HUB.md`](firmware/smalltv-agent-hub/AGENT_HUB.md)에
+  설명되어 있습니다
 
 `TaskCompleted`는 하위 작업이나 팀원의 작업 완료를 의미할 수 있으므로
 Claude 주 세션의 종료가 아니라 진행 상태로 처리합니다. Claude의 `Stop`
@@ -151,8 +137,8 @@ SmallTV가 Mac에서 데이터를 가져오는 구조가 아니라, 브리지가
 레이아웃 예산에 맞게 줄어듭니다. 프롬프트, 응답, 파일 경로와 서비스 인증 정보는 Mac에 남습니다.
 
 펌웨어의 선택적 웹 비밀번호를 켜면 `/api/agents`와 `/api/notify`도
-보호됩니다. 첫 로컬 설정에서는 비활성화해 두세요. 활성화하기 전에 Mac
-전송 클라이언트에 Digest 인증 지원을 추가해야 합니다.
+보호됩니다. **꺼두세요.** 브리지는 인증 정보를 보내지 않으므로, 켜면 기기가
+모든 전송을 거부합니다.
 
 현재 SmallTV Pro 빌드에는 Agent Hub, Ticker, Clawdmeter, Weather,
 Home Assistant, Carousel이 포함됩니다. 데스크용 날씨 화면의 공간을
@@ -179,7 +165,9 @@ python3 scripts/install_hooks.py --apply
 
 - 다른 훅을 제거하지 않고 `~/.claude/settings.json`에 desk-hub 항목 병합
 - 저장소 위치가 바뀌었을 때 이전 절대 경로의 desk-hub 훅 갱신
-- 기존 Claude와 Codex 설정 파일 백업
+- `~/.claude/settings.json`, `~/.codex/config.toml`, `~/.codex/hooks.json`을
+  쓰기 전에 백업
+- 다른 도구의 항목은 그대로 두고 `~/.codex/hooks.json`에 desk-hub 훅만 병합
 - 프로젝트 단위 Codex 설정에서는 `notify`를 지정할 수 없으므로 사용자
   단위 Codex `notify` 명령 갱신
 - 기존 Codex 알림 명령을 기록하고 원래 JSON을 그대로 전달
@@ -249,8 +237,7 @@ Conductor가 관리하는 Claude/Codex 실행 파일이 `~/.claude` 또는
 동일하게 적용됩니다.
 
 릴리스 변경 사항은 [`CHANGELOG.md`](CHANGELOG.md), 소스 기반 릴리스
-절차는 [`RELEASING.md`](RELEASING.md), 현재 GitHub 설정 검토 결과는
-[`REPOSITORY_SETTINGS.md`](REPOSITORY_SETTINGS.md)에 기록되어 있습니다.
+절차는 [`RELEASING.md`](RELEASING.md)에 기록되어 있습니다.
 
 ## 라이선스와 upstream 표기
 
@@ -262,5 +249,3 @@ WTFPL v2 라이선스를 유지합니다. 가져온 revision과 표기는
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)를 참고하세요.
 
 보안 문제는 [`SECURITY.md`](SECURITY.md)의 절차에 따라 신고해야 합니다.
-저장소 공개와 소유자 설정 절차는
-[`PUBLIC_RELEASE_CHECKLIST.md`](PUBLIC_RELEASE_CHECKLIST.md)를 참고하세요.

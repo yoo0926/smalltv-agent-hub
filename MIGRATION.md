@@ -35,7 +35,9 @@ device URL and installation choices in the Git-ignored `.env`; pressing Enter
 accepts those defaults on later runs. The checked-in `.env.example` contains
 only safe defaults and never a machine-specific device address.
 
-The hook installer merges with existing Claude hooks and chains an existing
+The hook installer merges into three files: Claude hooks in `~/.claude/settings.json`,
+Codex hooks in `~/.codex/hooks.json`, and the Codex `notify` command in
+`~/.codex/config.toml`. It preserves existing entries and chains an existing
 Codex notifier. It also recognizes a previous desk-hub installation and updates
 absolute paths when the clone has moved. Existing configuration files are
 backed up before an applied change.
@@ -50,7 +52,8 @@ backed up before an applied change.
 | Python and PlatformIO environments | `firmware/smalltv-agent-hub/.venv`, `.pio-core`, `.pio` | No. The bootstrap reconstructs them. |
 | Reference clones and scratch files | `references/`, `tmp/` | No. They are research/build material, not project inputs. |
 | Compiled firmware | `dist/` and `*.bin` | No. Rebuild it or download a CI/release artifact. |
-| Claude and Codex hooks | `~/.claude/settings.json`, `~/.codex/config.toml` | Do not copy wholesale. The interactive setup merges the hooks while preserving other settings. |
+| Claude and Codex hooks | `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.codex/config.toml` | Do not copy wholesale. The interactive setup merges only the desk-hub entries and leaves other tools' hooks alone. |
+| Offline event queue and hook throttle stamps | `~/Library/Caches/GeekMagicDeskHub/` (or `$DESK_HUB_SPOOL`) | No. The bridge replays and clears it at startup; delete it on the old Mac. |
 | Login service | `~/Library/LaunchAgents/com.geekmagic.desk-hub.plist` | No. The interactive setup recreates it with the new clone path and device URL. |
 | Wi-Fi, ticker, weather, display, and web-auth settings | SmallTV flash | They remain on the existing device. Configure them again in the web UI only for a new or erased device. |
 | Stock-firmware backup | local backup directory only | Never commit or publish it. Treat any embedded Wi-Fi or auth data as credentials. |

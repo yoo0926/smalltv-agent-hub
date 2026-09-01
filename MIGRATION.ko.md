@@ -38,7 +38,9 @@ Mac과 SmallTV가 같은 네트워크에 연결되면 알림 훅과 로그인 �
 그대로 사용할 수 있습니다. 저장소의 `.env.example`에는 공개 가능한
 기본값만 있고 Mac별 기기 주소는 포함하지 않습니다.
 
-훅 설치 프로그램은 기존 Claude 훅을 보존해 병합하고 기존 Codex 알림
+훅 설치 프로그램은 파일 세 곳에 병합합니다. Claude 훅은 `~/.claude/settings.json`,
+Codex 훅은 `~/.codex/hooks.json`, Codex `notify` 명령은 `~/.codex/config.toml`입니다.
+기존 항목은 보존하며, 기존 Codex 알림
 명령을 연쇄 실행합니다. 이전 desk-hub 설치도 인식하여 저장소 위치가
 바뀌면 절대 경로를 갱신합니다. 실제 변경 전에 기존 설정 파일을
 백업합니다.
@@ -53,7 +55,8 @@ Mac과 SmallTV가 같은 네트워크에 연결되면 알림 훅과 로그인 �
 | Python과 PlatformIO 환경 | `firmware/smalltv-agent-hub/.venv`, `.pio-core`, `.pio` | 아니요. 부트스트랩이 다시 생성합니다. |
 | 참고 저장소와 임시 파일 | `references/`, `tmp/` | 아니요. 프로젝트 입력이 아닌 조사·빌드 자료입니다. |
 | 컴파일된 펌웨어 | `dist/`와 `*.bin` | 아니요. 다시 빌드하거나 CI/릴리스 산출물을 받으세요. |
-| Claude와 Codex 훅 | `~/.claude/settings.json`, `~/.codex/config.toml` | 전체 파일을 복사하지 마세요. 대화형 setup이 다른 설정을 보존하면서 훅을 병합합니다. |
+| Claude와 Codex 훅 | `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.codex/config.toml` | 전체 파일을 복사하지 마세요. 대화형 setup이 desk-hub 항목만 병합하고 다른 도구의 훅은 그대로 둡니다. |
+| 오프라인 이벤트 큐와 훅 스로틀 스탬프 | `~/Library/Caches/GeekMagicDeskHub/`(또는 `$DESK_HUB_SPOOL`) | 아니요. 브리지가 시작할 때 재전송 후 비웁니다. 이전 Mac에서는 삭제하세요. |
 | 로그인 서비스 | `~/Library/LaunchAgents/com.geekmagic.desk-hub.plist` | 아니요. 대화형 setup이 새 저장소 경로와 기기 주소로 다시 생성합니다. |
 | Wi-Fi, 티커, 날씨, 화면, 웹 인증 설정 | SmallTV 플래시 | 같은 기기에는 그대로 남습니다. 새 기기나 초기화한 기기에서만 웹 UI로 다시 설정하세요. |
 | stock 펌웨어 백업 | 별도의 로컬 백업 폴더 | 절대 커밋하거나 공개하지 마세요. 포함된 Wi-Fi 또는 인증 데이터는 인증 정보로 취급하세요. |

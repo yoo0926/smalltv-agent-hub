@@ -9,30 +9,20 @@ Local-only status bridge for Conductor sessions running Claude Code and Codex. T
 ## Current capabilities
 
 - Claude Code: `working`, `needs_input`, `done`, `failed`, and `idle`
-- Codex: `done` for the officially supported external `agent-turn-complete` notification
-- Conductor workspace labeling from the git branch, falling back to the Conductor workspace name, so a workspace renamed after its session started is still labeled correctly
-- One row per workspace, not per session, so a Claude restart or a Codex run beside it never splits a repository across two rows
-- Existing Codex `notify` command chaining instead of replacing it
+- Codex: `working`, `needs_input`, `done`, and `idle`, from hooks in `~/.codex/hooks.json`, with the official `agent-turn-complete` notification kept as a second turn-complete path
 - Local-Conductor-only filtering through `CONDUCTOR_IS_LOCAL=1`
 - Privacy-minimized offline queue with automatic replay on bridge startup
-- Dependency-free Python service running on Homebrew Python 3.14, with Python 3.9+ compatibility and persisted local state
+- Dependency-free Python service with persisted local state
 - Asynchronous push to `POST /api/agents`, plus full-screen `done` / `needs_input` alerts through `POST /api/notify`
-- SmallTV Pro touch controls: tap to dismiss an alert; hold to open the app menu, tap to move forward, two quick taps to move back, and hold to select
-- On-device Settings card at the end of that menu, showing the IP to open in a browser, the `.local` name, the joined network, and the firmware version
-- Web dashboard app shortcuts that switch the display immediately and persist the selection
-- SmallTV Pro weather screen for a configured city, powered by Open-Meteo current conditions and a four-day forecast
-- Yahoo Finance ticker support for exchange-qualified symbols such as `000660.KS`, with fetch diagnostics in the web dashboard
-- Native-looking won-sign and grouped whole-won prices for Korean tickers
-- Adaptive Agent Hub layout: a large hero view for one task, two large cards, or readable compact rows for three to four tasks
-- Visible success/error toast feedback after saving settings in the web dashboard
+- What the device itself shows — the app menu, the Settings card, weather, tickers, and the adaptive Agent Hub layout — is described in [`firmware/smalltv-agent-hub/AGENT_HUB.md`](firmware/smalltv-agent-hub/AGENT_HUB.md)
 
 `TaskCompleted` is treated as progress rather than ending the main Claude session, because it can refer to a subtask or teammate. The Claude `Stop` hook is the authoritative turn-complete event, and only `SessionEnd` closes a session for good.
 
-`Stop` ends a turn rather than the session, so a session that resumes without a new prompt — after a permission grant, for example — keeps showing its last state until the next turn ends. The bridge can close that gap with a throttled `PostToolUse` hook, which is implemented but not installed: the hook process starts on every tool call and costs roughly 80 ms each time. See the note above `CLAUDE_EVENTS` in [`scripts/install_hooks.py`](scripts/install_hooks.py) to turn it on.
+`Stop` ends a turn rather than the session, so a session that resumes without a new prompt — after a permission grant, for example — keeps showing its last state until the next turn ends. A throttled `PostToolUse` hook would close that gap; it is implemented but deliberately not installed, for the reason recorded above `CLAUDE_EVENTS` in [`scripts/install_hooks.py`](scripts/install_hooks.py).
 
-A workspace speaks with one voice on the display: among its sessions, `needs_input` outranks `failed`, which outranks `working`, which outranks `done`. The same ranking decides which workspaces reach the four rows when there are more than four, and the order they appear in, so a workspace waiting for you is never crowded out by busier ones. A `done` alert is therefore suppressed while another session in the same workspace is still running, and finished work leaves the display after ten minutes.
+A workspace speaks with one voice on the display. Only the newest session of each kind counts, so a restarted Claude replaces the one it succeeded while Claude and Codex each keep a voice; among those, `needs_input` outranks `failed`, which outranks `working`, which outranks `done`. The same ranking decides which workspaces reach the four rows and the order they appear in, so one waiting for you is never crowded out by busier ones. A `done` alert is suppressed while another session in the workspace is still running, and finished work leaves the display after ten minutes.
 
-A row is named after its git branch rather than `CONDUCTOR_WORKSPACE_NAME`, because Conductor freezes that variable into the session process at launch: a workspace renamed afterwards keeps announcing the codename it was created with until a new session replaces it. The branch is re-read on every event, and Conductor derives the workspace name from it anyway. A branch's conventional type prefix is dropped, so `fix/public-error-user-agent` shows as `public-error-user-agent`. A branch that names no particular work — `main` or `master` — yields to the workspace name, which yields in turn to the agent type. A label too long for the layout loses its middle rather than its tail — `verify-local-agent-hub-status` and its `-v1` variant become `verify-..status` and `verify-..tus-v1` — because a branch is identified by its front and told apart from its siblings by its back. The budget follows the layout the row count picks, matching the firmware so it never shortens a second time: nineteen characters for a lone row, fifteen for a pair of cards, sixteen for three or four, and twenty on the alert screen.
+A row is named after its git branch, not `CONDUCTOR_WORKSPACE_NAME`: Conductor freezes that variable at session launch, so a workspace renamed afterwards would keep announcing its old codename. The branch's type prefix is dropped, so `fix/public-error-user-agent` shows as `public-error-user-agent`, and a branch naming no particular work — `main` or `master` — yields to the workspace name. A label too long for its row loses its middle rather than its tail, so `verify-local-agent-hub-status` and its `-v1` variant stay distinguishable. Budgets match the firmware's own so it never shortens twice: 19 characters for a lone row, 15 for a pair, 16 for three or four, 20 on the alert screen.
 
 Prompts and assistant responses are not persisted in the state file or offline queue. The display API emits short lifecycle messages such as `Working`, `Permission required`, and `Turn complete`.
 
@@ -104,7 +94,7 @@ The SmallTV pulls no data from the Mac. The bridge pushes outward, so the HTTP s
 
 Only the agent type, short workspace label, and lifecycle state are sent to the display. That label is the branch name, so treat branch names as visible on the desk; a branch's type prefix is dropped and the rest is reduced to printable ASCII within the layout's budget. Prompts, responses, file paths, and service credentials stay on the Mac.
 
-The firmware's optional web password also protects `/api/agents` and `/api/notify`. Leave it disabled for this first local setup; digest-auth support can be added to the Mac push client before enabling it.
+The firmware's optional web password also protects `/api/agents` and `/api/notify`. Leave it off: the bridge sends no credentials, so turning it on makes the device reject every push.
 
 The current SmallTV Pro build includes Agent Hub, Ticker, Clawdmeter, Weather,
 Home Assistant, and Carousel. The upstream plane-radar screen is intentionally
@@ -132,7 +122,8 @@ The installer:
 
 - merges desk-hub entries into `~/.claude/settings.json` without removing other hooks;
 - updates old absolute desk-hub hook paths when the clone has moved;
-- backs up existing Claude and Codex configuration files;
+- backs up `~/.claude/settings.json`, `~/.codex/config.toml`, and `~/.codex/hooks.json` before writing;
+- merges the desk-hub hook into `~/.codex/hooks.json`, leaving other tools' entries there untouched;
 - changes the user-level Codex `notify` command, because project-level Codex config is not allowed to set `notify`;
 - records the previous Codex notify command and forwards the original JSON to it.
 
@@ -165,13 +156,9 @@ python3 scripts/install_launch_agent.py --uninstall --apply
 
 ## Local Conductor verification
 
-1. Start `./bin/desk-hub`.
-2. Open a new Claude Code session from a Conductor workspace.
-3. Send a prompt, wait for completion, then trigger one permission request.
-4. Inspect `http://127.0.0.1:4747/api/v1/status`.
-5. Open a new Codex session in Conductor and finish one turn.
-6. Confirm that the returned `cwd`, workspace name, and branch identify the correct Conductor worktree.
-   The branch is what reaches the display, so check it against the label shown there.
+Send a prompt from a local Conductor workspace, then compare
+`http://127.0.0.1:4747/api/v1/status` against the label on the device: the row is
+named after the git branch, so that is what should match.
 
 If a Conductor-managed Claude/Codex binary uses an isolated home instead of `~/.claude` or `~/.codex`, point that harness at the system executable or install the same hook configuration in its actual config home. The event endpoint and firmware protocol do not change.
 
@@ -189,8 +176,6 @@ rules apply equally to issue logs, screenshots, and test fixtures.
 
 Release changes are tracked in [`CHANGELOG.md`](CHANGELOG.md), and the
 source-only release process is documented in [`RELEASING.md`](RELEASING.md).
-The current GitHub configuration review is recorded in
-[`REPOSITORY_SETTINGS.md`](REPOSITORY_SETTINGS.md).
 
 ## Licensing and upstream attribution
 
@@ -202,6 +187,4 @@ WTFPL v2 license in
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the imported revision and
 attribution.
 
-Security reports must follow [`SECURITY.md`](SECURITY.md). Publication and
-repository-owner settings are documented in
-[`PUBLIC_RELEASE_CHECKLIST.md`](PUBLIC_RELEASE_CHECKLIST.md).
+Security reports must follow [`SECURITY.md`](SECURITY.md).

@@ -105,7 +105,6 @@ class ReleaseReadinessTests(unittest.TestCase):
             "MIGRATION.md",
             "MIGRATION.ko.md",
             "CONTRIBUTING.md",
-            "PUBLIC_RELEASE_CHECKLIST.md",
         )
         for name in names:
             text = (ROOT / name).read_text(encoding="utf-8")
@@ -122,13 +121,6 @@ class ReleaseReadinessTests(unittest.TestCase):
             self.assertIn("./scripts/bootstrap_macos.sh --build", text, name)
             self.assertIn("./scripts/setup_macos.sh", text, name)
 
-    def test_publication_docs_are_timeless(self):
-        checklist = (ROOT / "PUBLIC_RELEASE_CHECKLIST.md").read_text(
-            encoding="utf-8"
-        )
-        settings = (ROOT / "REPOSITORY_SETTINGS.md").read_text(encoding="utf-8")
-        self.assertNotIn("CI run #", checklist)
-        self.assertNotIn("Reviewed against", settings)
 
 
 if __name__ == "__main__":

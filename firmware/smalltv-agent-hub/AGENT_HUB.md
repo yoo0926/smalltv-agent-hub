@@ -5,7 +5,10 @@ persistent local-agent dashboard for Conductor sessions.
 
 ## Device API
 
-Push the four newest tasks to the persistent dashboard:
+Push up to four workspace rows to the persistent dashboard, most urgent first. When
+more workspaces are active than fit, the bridge keeps the ones that most want
+attention — `needs_input`, then `failed`, then `working`, then `done` — and lets
+recency settle ties.
 
 ```http
 POST /api/agents

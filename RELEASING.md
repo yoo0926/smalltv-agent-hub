@@ -6,7 +6,7 @@ run produced the firmware artifacts.
 
 ## Repository publication
 
-Follow the owner actions in `PUBLIC_RELEASE_CHECKLIST.md`: make the repository
+Make the repository
 public, then enable private vulnerability reporting in GitHub's Advanced
 Security settings. Repository publication does not create a firmware release.
 
