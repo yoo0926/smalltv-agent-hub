@@ -196,8 +196,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[list] = None) -> int:
     args = build_parser().parse_args(argv)
-    raw_payload = args.payload if args.source == "codex" else sys.stdin.read()
-    forward_argv = load_forward_argv(args.forward_config) if args.source == "codex" else []
+    # Codex feeds its notify command the payload as an argument and its hooks on
+    # stdin, so the presence of the argument is what tells the two apart.
+    use_argv = args.source == "codex" and args.payload is not None
+    raw_payload = args.payload if use_argv else sys.stdin.read()
+    forward_argv = load_forward_argv(args.forward_config) if use_argv else []
     try:
         payload = json.loads(raw_payload or "{}")
         if not isinstance(payload, dict):
@@ -229,7 +232,7 @@ def main(argv: Optional[list] = None) -> int:
     finally:
         # Codex supports one notify program. Preserve any program that was
         # configured before desk-hub installation by forwarding the raw JSON.
-        if args.source == "codex":
+        if use_argv:
             forward_codex(forward_argv, raw_payload or "{}")
     return 0
 

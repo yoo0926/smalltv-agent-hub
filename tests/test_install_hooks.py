@@ -3,7 +3,9 @@ import unittest
 
 from scripts.install_hooks import (
     CLAUDE_EVENTS,
+    CODEX_HOOK_EVENTS,
     add_claude_hooks,
+    merge_codex_hooks,
     merge_claude_hooks,
     parse_notify,
     replace_notify,
@@ -122,6 +124,63 @@ class InstallHookTests(unittest.TestCase):
         )
         self.assertTrue(found)
         self.assertEqual(rewritten, wrapper)
+
+
+class CodexHookMergeTests(unittest.TestCase):
+    """Codex's hooks.json is shared: other tools already own entries there, so
+    the one thing this must never do is disturb them."""
+
+    ORCA = {"hooks": [{"type": "command", "command": "/bin/sh /orca/codex-hook.sh", "timeout": 10}]}
+    COMMAND = "/tmp/desk-hub-event codex"
+
+    def _existing(self):
+        return {
+            "hooks": {
+                "SessionStart": [
+                    {"matcher": "*", "hooks": [{"type": "command", "command": "node update-check.cjs"}]},
+                    json.loads(json.dumps(self.ORCA)),
+                ],
+                "UserPromptSubmit": [json.loads(json.dumps(self.ORCA))],
+                "PostToolUse": [json.loads(json.dumps(self.ORCA))],
+            }
+        }
+
+    def test_every_existing_entry_survives(self):
+        doc = self._existing()
+        merge_codex_hooks(doc, self.COMMAND)
+        starts = [h["command"] for g in doc["hooks"]["SessionStart"] for h in g["hooks"]]
+        self.assertIn("node update-check.cjs", starts)
+        self.assertIn("/bin/sh /orca/codex-hook.sh", starts)
+        # An event we do not install must be left exactly as it was.
+        self.assertEqual(doc["hooks"]["PostToolUse"], [self.ORCA])
+
+    def test_it_adds_itself_to_every_event_it_needs(self):
+        doc = self._existing()
+        added, updated = merge_codex_hooks(doc, self.COMMAND)
+        self.assertEqual((added, updated), (len(CODEX_HOOK_EVENTS), 0))
+        for event in CODEX_HOOK_EVENTS:
+            commands = [h["command"] for g in doc["hooks"][event] for h in g["hooks"]]
+            self.assertIn(self.COMMAND, commands)
+
+    def test_running_it_twice_changes_nothing(self):
+        doc = self._existing()
+        merge_codex_hooks(doc, self.COMMAND)
+        snapshot = json.dumps(doc, sort_keys=True)
+        self.assertEqual(merge_codex_hooks(doc, self.COMMAND), (0, 0))
+        self.assertEqual(json.dumps(doc, sort_keys=True), snapshot)
+
+    def test_a_clone_that_moved_is_rewritten_not_duplicated(self):
+        doc = {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "/old/path/desk-hub-event codex"}]}]}}
+        added, updated = merge_codex_hooks(doc, self.COMMAND)
+        self.assertEqual(updated, 1)
+        commands = [h["command"] for g in doc["hooks"]["Stop"] for h in g["hooks"]]
+        self.assertEqual(commands, [self.COMMAND])
+
+    def test_no_per_tool_call_hook_is_installed(self):
+        """Same reasoning as Claude's: the state stays working until the turn
+        ends, so a subprocess per tool call would buy nothing."""
+        self.assertNotIn("PreToolUse", CODEX_HOOK_EVENTS)
+        self.assertNotIn("PostToolUse", CODEX_HOOK_EVENTS)
 
 
 if __name__ == "__main__":

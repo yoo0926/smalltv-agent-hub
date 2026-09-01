@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import os
+from functools import lru_cache
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -77,6 +79,10 @@ def _claude_state(event: str, payload: Dict[str, Any]) -> Optional[str]:
         return "failed"
     if event == "SessionEnd":
         return "idle"
+    if event == "PermissionRequest":
+        # Codex only. It blocks here until a human answers, which is the state
+        # the display most needs to show.
+        return "needs_input"
     if event == "Notification":
         notification_type = str(payload.get("notification_type", "")).lower()
         message = str(payload.get("message", "")).lower()
@@ -99,6 +105,8 @@ def _claude_message(event: str, payload: Dict[str, Any]) -> str:
         return "Turn complete"
     if event == "StopFailure":
         return _text(payload.get("error") or "Turn failed")
+    if event == "PermissionRequest":
+        return "Permission required"
     if event == "Notification":
         notification_type = str(payload.get("notification_type") or "")
         if notification_type == "permission_prompt":
@@ -111,6 +119,33 @@ def _claude_message(event: str, payload: Dict[str, Any]) -> str:
     if event == "TaskCompleted":
         return "Task completed"
     return _text(event)
+
+
+@lru_cache(maxsize=512)
+def _resolved(path: str) -> str:
+    """realpath, memoized because this runs per agent on every push.
+
+    Symlinks here are created once with the workspace and never move, so a stale
+    entry is not a risk worth paying repeated lstat calls for.
+    """
+    try:
+        return os.path.realpath(path)
+    except OSError:
+        return path
+
+
+def workspace_key(agent: Dict[str, Any]) -> str:
+    """Identity of the workspace a session belongs to.
+
+    Conductor gives a workspace a codename directory and symlinks the branch name
+    to it, and sessions report whichever path they were launched with. Comparing
+    the raw strings therefore split one workspace across two rows — the display
+    has four, and the grouping exists precisely to stop that.
+    """
+    path = str(agent.get("workspace_path") or "")
+    if path:
+        return _resolved(path)
+    return str(agent.get("workspace") or "")
 
 
 def normalize_event(source: str, payload: Dict[str, Any], received_at: Optional[str] = None) -> Dict[str, Any]:
@@ -126,10 +161,21 @@ def normalize_event(source: str, payload: Dict[str, Any], received_at: Optional[
         message = _claude_message(event, payload)
         agent = "claude"
     elif source == "codex":
-        event = str(payload.get("type") or payload.get("event") or "unknown")
-        session_id = str(payload.get("thread-id") or payload.get("thread_id") or "")
-        state = "done" if event == "agent-turn-complete" else None
-        message = "Turn complete" if event == "agent-turn-complete" else _text(event)
+        # Codex arrives two ways. Its `notify` command fires once, when a turn
+        # ends, and is the only channel documented as external-facing — but on
+        # its own it can never say "working", so the display sat on the last
+        # "done" it heard while Codex carried on. Its hooks close that gap, and
+        # they use Claude's schema exactly: same event names, same field names.
+        if payload.get("hook_event_name"):
+            event = str(payload["hook_event_name"])
+            session_id = str(payload.get("session_id") or "")
+            state = _claude_state(event, payload)
+            message = _claude_message(event, payload)
+        else:
+            event = str(payload.get("type") or payload.get("event") or "unknown")
+            session_id = str(payload.get("thread-id") or payload.get("thread_id") or "")
+            state = "done" if event == "agent-turn-complete" else None
+            message = "Turn complete" if event == "agent-turn-complete" else _text(event)
         agent = "codex"
     else:
         event = str(payload.get("event") or "unknown")

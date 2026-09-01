@@ -97,5 +97,49 @@ class EventTests(unittest.TestCase):
         self.assertEqual(event["session_key"], "codex:x1")
 
 
+class CodexHookTests(unittest.TestCase):
+    """Codex sends the same hook payloads Claude does — same event names, same
+    field names, delivered on stdin. Its `notify` command only fires when a turn
+    ends, so without these the display could never show Codex actually working:
+    it stayed on the last "done" it heard about until that aged off."""
+
+    @staticmethod
+    def _hook(event, **extra):
+        payload = {"hook_event_name": event, "session_id": "abc", "cwd": "/ws/demo"}
+        payload.update(extra)
+        return normalize_event("codex", payload)
+
+    def test_a_codex_prompt_reports_working(self):
+        event = self._hook("UserPromptSubmit")
+        self.assertEqual(event["state"], "working")
+        self.assertEqual(event["agent"], "codex")
+
+    def test_a_codex_turn_ending_reports_done(self):
+        self.assertEqual(self._hook("Stop")["state"], "done")
+
+    def test_codex_waiting_for_approval_asks_for_a_human(self):
+        """Codex blocks on PermissionRequest until someone answers, which is
+        exactly what the display exists to surface."""
+        self.assertEqual(self._hook("PermissionRequest")["state"], "needs_input")
+
+    def test_working_is_not_re_reported_per_tool_call(self):
+        """No per-tool-call hook is installed for either agent: the state stays
+        working until the turn ends, so paying a subprocess per tool call would
+        buy nothing. This pins that PreToolUse carries no state of its own."""
+        self.assertIsNone(self._hook("PreToolUse")["state"])
+
+    def test_the_notify_path_still_works(self):
+        """The turn-complete notification is a separate integration and predates
+        the hooks; installing one must not break the other."""
+        event = normalize_event("codex", {"type": "agent-turn-complete", "thread-id": "t1", "cwd": "/ws/demo"})
+        self.assertEqual(event["state"], "done")
+        self.assertEqual(event["agent"], "codex")
+        self.assertEqual(event["message"], "Turn complete")
+
+    def test_an_unknown_codex_notification_still_carries_no_state(self):
+        event = normalize_event("codex", {"type": "something-else", "thread-id": "t1"})
+        self.assertIsNone(event["state"])
+
+
 if __name__ == "__main__":
     unittest.main()
