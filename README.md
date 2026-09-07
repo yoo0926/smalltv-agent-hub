@@ -52,7 +52,7 @@ deliberately left blank until supplied on the target Mac.
 
 The local defaults are:
 
-- `DESK_HUB_DEVICE_URL`: SmallTV base URL;
+- `DESK_HUB_DEVICE_URL`: SmallTV base URL, preferably its mDNS name;
 - `DESK_HUB_INSTALL_CLAUDE`: install or refresh Claude Code hooks;
 - `DESK_HUB_INSTALL_CODEX`: install or refresh Codex notifications;
 - `DESK_HUB_INSTALL_SERVICE`: install and start the macOS login service.
@@ -89,8 +89,16 @@ GET /api/v1/status
 The SmallTV pulls no data from the Mac. The bridge pushes outward, so the HTTP server remains safely bound to `127.0.0.1`. Point it at the device with:
 
 ```bash
-./bin/desk-hub --device-url http://DEVICE_IP
+./bin/desk-hub --device-url http://smalltv-xxxx.local
 ```
+
+Name the device rather than address it. DHCP hands out a new lease every few
+days, and a configured IP goes stale silently: the pushes fail, and the display
+simply stops changing. The firmware advertises itself over mDNS, so the name
+outlives the lease -- the address behind it is resolved once, cached, and looked
+up again after any failed push. `dns-sd -B _clawdmeter._tcp local` lists the
+name to use, and `/healthz` reports the address currently behind it. A literal
+IP still works for a device with a reservation.
 
 Only the agent type, short workspace label, and lifecycle state are sent to the display. That label is the branch name, so treat branch names as visible on the desk; a branch's type prefix is dropped and the rest is reduced to printable ASCII within the layout's budget. Prompts, responses, file paths, and service credentials stay on the Mac.
 
@@ -145,7 +153,7 @@ python3 scripts/install_launch_agent.py
 Install and start it:
 
 ```bash
-python3 scripts/install_launch_agent.py --device-url http://DEVICE_IP --apply
+python3 scripts/install_launch_agent.py --device-url http://smalltv-xxxx.local --apply
 ```
 
 It runs on login, restarts after a crash, and writes logs under `.runtime/`. Remove it with:
