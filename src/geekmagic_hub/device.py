@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
+import socket
 import threading
 import time
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import Any, Deque, Dict, List, Optional
 from urllib.error import HTTPError, URLError
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 from .events import workspace_key
@@ -52,6 +54,14 @@ GENERIC_BRANCHES = frozenset({"main", "master"})
 # half an hour ago after a long outage is noise, which is what the old
 # drop-everything behaviour was reaching for.
 ALERT_RETRY_FOR = 120.0
+
+
+def _is_address(host: str) -> bool:
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True
 
 
 def _workspace_still_busy(agent: Dict[str, Any], snapshot: Dict[str, Any]) -> bool:
@@ -239,6 +249,14 @@ class DeviceNotifier:
         self.base_url = base_url.rstrip("/") + "/"
         self.timeout = timeout
         self.refresh_sec = refresh_sec
+        # DHCP hands the device a new IP every few days, so the target is
+        # configured by mDNS name and the address is looked up here. A literal
+        # address has nothing to look up and is used as configured.
+        self._parts = urlsplit(self.base_url)
+        self._host = self._parts.hostname or ""
+        self._port = self._parts.port or (443 if self._parts.scheme == "https" else 80)
+        self._named = not _is_address(self._host)
+        self._resolved = ""
         self._condition = threading.Condition()
         self._latest: Optional[Dict[str, Any]] = None
         # (deadline, payload): the deadline is what lets a failed push put an
@@ -265,6 +283,7 @@ class DeviceNotifier:
             return {
                 "configured": True,
                 "url": self.base_url.rstrip("/"),
+                "resolved": self._resolved,
                 "last_ok": self._last_ok,
                 "last_error": self._last_error,
             }
@@ -275,10 +294,45 @@ class DeviceNotifier:
             self._condition.notify()
         self._thread.join(timeout=2)
 
+    def _target_base(self) -> str:
+        """The base URL with the configured name replaced by its address.
+
+        Resolved once and cached: a dashboard push happens on every hook event,
+        and on macOS an unrestricted lookup of a `.local` name spends five
+        seconds waiting for the AAAA record the device never answers -- most of
+        the push timeout gone before the first byte is sent. Asking for IPv4
+        alone returns immediately.
+        """
+        if not self._named:
+            return self.base_url
+        with self._condition:
+            cached = self._resolved
+        if not cached:
+            # Outside the lock: a lookup that has to reach the network must not
+            # block the hooks calling publish().
+            cached = socket.getaddrinfo(
+                self._host, self._port, socket.AF_INET, socket.SOCK_STREAM
+            )[0][4][0]
+            with self._condition:
+                self._resolved = cached
+        netloc = cached if self._parts.port is None else f"{cached}:{self._parts.port}"
+        return urlunsplit((self._parts.scheme, netloc, self._parts.path, "", ""))
+
+    def _forget_address(self) -> None:
+        """Drop the cached address so the next push looks the name up again.
+
+        A failed push is the only signal that the device moved: the name still
+        resolves for whoever holds the old lease, and nothing announces the
+        change. Retrying the cached address forever is exactly the failure this
+        replaces.
+        """
+        with self._condition:
+            self._resolved = ""
+
     def _post(self, path: str, payload: Dict[str, Any]) -> None:
         body = json.dumps(payload, ensure_ascii=True, separators=(",", ":")).encode("ascii")
         request = Request(
-            urljoin(self.base_url, path.lstrip("/")),
+            urljoin(self._target_base(), path.lstrip("/")),
             data=body,
             headers={"Content-Type": "application/json"},
             method="POST",
@@ -315,6 +369,7 @@ class DeviceNotifier:
                 # device that was briefly busy still gets them -- but only while
                 # they are recent, because replaying an old overlay after a long
                 # outage says nothing useful about now.
+                self._forget_address()
                 keep = [item for item in alerts if item[0] > time.monotonic()]
                 with self._condition:
                     if keep:

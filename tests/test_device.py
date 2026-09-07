@@ -1,8 +1,11 @@
+import contextlib
 import os
+import socket
 import tempfile
 import threading
 import unittest
 from datetime import datetime, timedelta
+from unittest import mock
 
 from geekmagic_hub import device as device_module
 from geekmagic_hub.device import DeviceNotifier, alert_payload, dashboard_payload
@@ -10,6 +13,53 @@ from geekmagic_hub.device import DeviceNotifier, alert_payload, dashboard_payloa
 # The dashboard hides finished work after a while, so the tests pin "now"
 # instead of racing the wall clock.
 NOW = datetime.fromisoformat("2026-08-31T01:30:00+00:00")
+
+
+@contextlib.contextmanager
+def _lookup(addresses):
+    """Stand in for DNS, handing out the given addresses one lookup at a time.
+
+    Yields the recorded calls so a test can assert both how often the name was
+    looked up and which address family was asked for.
+    """
+    calls = []
+
+    def fake_getaddrinfo(host, port, family=0, *args, **kwargs):
+        calls.append({"host": host, "port": port, "family": family})
+        address = addresses[min(len(calls), len(addresses)) - 1]
+        return [(family, socket.SOCK_STREAM, 6, "", (address, port))]
+
+    with mock.patch("socket.getaddrinfo", fake_getaddrinfo):
+        yield calls
+
+
+class _Accepted:
+    status = 200
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+@contextlib.contextmanager
+def _urlopen(fail_first=0, on_success=None):
+    """Stand in for the network, recording the URL each push was sent to."""
+    sent = []
+    remaining = {"failures": fail_first}
+
+    def fake_urlopen(request, timeout=None):
+        sent.append(request.full_url)
+        if remaining["failures"]:
+            remaining["failures"] -= 1
+            raise OSError("device moved")
+        if on_success is not None:
+            on_success.set()
+        return _Accepted()
+
+    with mock.patch.object(device_module, "urlopen", fake_urlopen):
+        yield sent
 
 
 class DevicePayloadTests(unittest.TestCase):
@@ -555,6 +605,84 @@ class UrgencyOrderTests(unittest.TestCase):
         )
         self.assertEqual(rows[0]["label"], "busy")
         self.assertIn("busy", [r["label"] for r in rows])
+
+
+class DeviceAddressTests(unittest.TestCase):
+    """The push target is configured by name, not by address.
+
+    The device takes its IP from DHCP and is handed a new one every few days,
+    which silently broke every push until the next reinstall. The firmware
+    advertises itself over mDNS, so the target is configured as
+    ``http://smalltv-xxxx.local`` and the address is looked up here.
+    """
+
+    HOST_URL = "http://smalltv-test.local"
+
+    def _notifier(self, base_url=None, **kwargs):
+        options = {"timeout": 0.2, "refresh_sec": 0.05}
+        options.update(kwargs)
+        notifier = DeviceNotifier(base_url or self.HOST_URL, **options)
+        self.addCleanup(notifier.close)
+        return notifier
+
+    def test_a_named_target_is_pushed_to_by_address(self):
+        """The request has to leave for an address the socket layer can use."""
+        with _lookup(["10.0.0.7"]), _urlopen() as sent:
+            self._notifier()._post("api/agents", {"agents": []})
+        self.assertEqual(sent, ["http://10.0.0.7/api/agents"])
+
+    def test_a_named_target_keeps_its_port(self):
+        """Only the host is substituted; a non-default port must survive."""
+        with _lookup(["10.0.0.7"]), _urlopen() as sent:
+            self._notifier("http://smalltv-test.local:8080")._post("api/agents", {})
+        self.assertEqual(sent, ["http://10.0.0.7:8080/api/agents"])
+
+    def test_only_an_ipv4_address_is_asked_for(self):
+        """A plain lookup spends five seconds waiting for a AAAA the device
+        never answers, which is most of the push timeout gone before the first
+        byte is sent. Asking for IPv4 alone returns immediately."""
+        with _lookup(["10.0.0.7"]) as calls, _urlopen():
+            self._notifier()._post("api/agents", {})
+        self.assertEqual([call["family"] for call in calls], [socket.AF_INET])
+
+    def test_the_address_is_resolved_once_and_then_reused(self):
+        """A dashboard push happens on every hook event, so the lookup belongs
+        out of that path once it has an answer."""
+        with _lookup(["10.0.0.7"]) as calls, _urlopen():
+            notifier = self._notifier()
+            notifier._post("api/agents", {})
+            notifier._post("api/notify", {})
+        self.assertEqual(len(calls), 1)
+
+    def test_a_literal_address_is_never_resolved(self):
+        """Configuring an IP directly still has to work, and has nothing to
+        look up."""
+        with _lookup(["10.0.0.7"]) as calls, _urlopen() as sent:
+            self._notifier("http://192.168.0.42")._post("api/agents", {})
+        self.assertEqual(calls, [])
+        self.assertEqual(sent, ["http://192.168.0.42/api/agents"])
+
+    def test_a_failed_push_sends_the_next_one_to_a_fresh_address(self):
+        """The whole point: when DHCP moves the device, the cached address is
+        the stale one. A failure is the only signal that it moved, so it has to
+        drop the cache rather than keep retrying an address nobody answers."""
+        delivered = threading.Event()
+        with _lookup(["10.0.0.7", "10.0.0.8"]), _urlopen(fail_first=1, on_success=delivered) as sent:
+            notifier = self._notifier()
+            notifier.publish({"agents": []})
+            self.assertTrue(delivered.wait(timeout=5), "the push never recovered")
+        self.assertEqual(sent[0], "http://10.0.0.7/api/agents")
+        self.assertEqual(sent[1], "http://10.0.0.8/api/agents")
+
+    def test_the_resolved_address_is_reported_for_diagnosis(self):
+        """A push failing because the name no longer resolves looks exactly
+        like a push failing because the device is off, unless the status says
+        which address it is actually reaching for."""
+        notifier = self._notifier()
+        self.assertEqual(notifier.status()["resolved"], "")
+        with _lookup(["10.0.0.7"]), _urlopen():
+            notifier._post("api/agents", {})
+        self.assertEqual(notifier.status()["resolved"], "10.0.0.7")
 
 
 if __name__ == "__main__":

@@ -88,7 +88,7 @@ setup은 Claude 훅, Codex 알림, 사용자 로그인 서비스의 설치 여�
 
 로컬 기본값은 다음 네 가지입니다.
 
-- `DESK_HUB_DEVICE_URL`: SmallTV 기본 주소
+- `DESK_HUB_DEVICE_URL`: SmallTV 기본 주소. mDNS 이름을 권장합니다
 - `DESK_HUB_INSTALL_CLAUDE`: Claude Code 훅 설치 또는 갱신 여부
 - `DESK_HUB_INSTALL_CODEX`: Codex 알림 설치 또는 갱신 여부
 - `DESK_HUB_INSTALL_SERVICE`: macOS 로그인 서비스 설치 및 시작 여부
@@ -128,8 +128,16 @@ SmallTV가 Mac에서 데이터를 가져오는 구조가 아니라, 브리지가
 실행합니다.
 
 ```bash
-./bin/desk-hub --device-url http://DEVICE_IP
+./bin/desk-hub --device-url http://smalltv-xxxx.local
 ```
+
+주소 대신 이름을 지정하세요. DHCP는 며칠에 한 번씩 새 주소를 내주는데, 고정해
+둔 IP는 조용히 낡습니다. 푸시가 실패할 뿐 화면은 그냥 멈춰 있어서 알아채기
+어렵습니다. 펌웨어가 mDNS로 자기 이름을 광고하므로 이름은 임대 주소보다 오래
+갑니다. 뒤에 있는 주소는 한 번 해석해 캐시하고, 푸시가 실패하면 다시 해석합니다.
+쓸 이름은 `dns-sd -B _clawdmeter._tcp local` 로 확인하고, 지금 어느 주소로 나가고
+있는지는 `/healthz` 가 알려줍니다. 주소를 예약해 둔 기기라면 IP를 그대로 적어도
+됩니다.
 
 화면에는 에이전트 종류, 짧은 워크스페이스 이름, 작업 상태만 전송합니다.
 이 이름은 브랜치 이름이므로 브랜치 이름은 책상에서 보인다고 가정하세요.
@@ -195,7 +203,7 @@ python3 scripts/install_launch_agent.py
 설치하고 바로 시작하려면 다음을 실행합니다.
 
 ```bash
-python3 scripts/install_launch_agent.py --device-url http://DEVICE_IP --apply
+python3 scripts/install_launch_agent.py --device-url http://smalltv-xxxx.local --apply
 ```
 
 로그인 시 자동 실행되고, 비정상 종료 후 다시 시작되며, 로그는

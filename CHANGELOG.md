@@ -22,6 +22,13 @@ landed rather than every step taken to get there.
 
 ### Changed
 
+- The push target is resolved by name on every failure, so a device whose DHCP
+  lease moves it to a new address is found again instead of silently going
+  stale. Configure it as `http://smalltv-xxxx.local`; the address behind the
+  name is looked up once and cached, and `/healthz` reports which address the
+  pushes are going to. Only IPv4 is asked for, which avoids the five-second wait
+  macOS otherwise spends on an AAAA record the device never answers.
+
 - A workspace is one row, not one row per session, and it is named after its git
   branch. Only the newest session of each kind speaks for it, so a restarted
   Claude replaces the one before it while Claude and Codex each keep a voice.
